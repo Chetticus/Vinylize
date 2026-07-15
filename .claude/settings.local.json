@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm --version)",
+      "Bash(python -m venv .venv)",
+      "Bash(.venv/Scripts/python -m pip install -q -e \".[dev]\")"
+    ]
+  }
+}
