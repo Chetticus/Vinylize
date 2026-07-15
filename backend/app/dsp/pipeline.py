@@ -56,11 +56,23 @@ class PipelineConfig:
     seed: int = 1109
 
 
+MAX_DETAIL_SAMPLES = 3_000_000
+"""Per-channel budget for the retained spatial-domain groove (the 'microscope'
+source). 3M float32 samples ~= 12 MB/channel: full resolution for clips up to
+~40 s, gracefully decimated (band-limited) beyond that, so a 3-minute session
+holds ~24 MB of inspectable groove instead of ~140 MB of raw grid."""
+
+
 @dataclass
 class PipelineResult:
     vinyl: np.ndarray                     # (n, 2) float32 in [-1, 1]
     geometry: GrooveGeometry
     start_radius_mm: float                # effective placement after clamping
+    # High-resolution engraved groove retained for the inspection endpoint
+    # (post groove-medium stages — exactly what the 3D microscope shows).
+    detail_lateral: np.ndarray | None = None   # float32, meters
+    detail_vertical: np.ndarray | None = None  # float32, meters
+    detail_ds_m: float = 0.0                   # spacing of the detail arrays
     stage_metrics: dict[str, dict[str, float]] = field(default_factory=dict)
 
 
@@ -157,6 +169,19 @@ def run(
     report(0.62, "Building 3D geometry")
     geometry = build_geometry(lat_s, vert_s, spiral)
 
+    # Retain a memory-bounded copy for the microscope endpoint (band-limited
+    # decimation, never striding — see groove/geometry.py for why).
+    from scipy.signal import resample_poly as _resample_poly
+
+    detail_factor = max(1, -(-lat_s.shape[0] // MAX_DETAIL_SAMPLES))  # ceil div
+    if detail_factor > 1:
+        detail_lat = _resample_poly(lat_s, 1, detail_factor).astype(np.float32)
+        detail_vert = _resample_poly(vert_s, 1, detail_factor).astype(np.float32)
+    else:
+        detail_lat = np.asarray(lat_s, dtype=np.float32)
+        detail_vert = np.asarray(vert_s, dtype=np.float32)
+    detail_ds = spiral.ds * detail_factor
+
     # ------------------------------------------------------------------
     # Phase C — playback
     # ------------------------------------------------------------------
@@ -213,5 +238,8 @@ def run(
         vinyl=vinyl.astype(np.float32),
         geometry=geometry,
         start_radius_mm=spiral.start_radius_m * 1000.0,
+        detail_lateral=detail_lat,
+        detail_vertical=detail_vert,
+        detail_ds_m=detail_ds,
         stage_metrics=metrics,
     )

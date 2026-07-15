@@ -45,10 +45,10 @@
 import type { GrooveGeometry } from "../../types/api";
 import {
   OMEGA,
-  centerlineRadius,
   sectionAtTime,
-  sectionPoint,
-  type SectionParams,
+  trueRadiusMm,
+  viewComponentsMm,
+  type ChannelView,
 } from "./grooveMath";
 
 export interface ArmConfig {
@@ -109,17 +109,17 @@ export function solveArmYaw(cfg: ArmConfig, targetRadius: number): ArmSolution {
 export interface StylusPose extends ArmSolution {
   /** Groove section actually under the tip (accounts for tracking angle). */
   sectionIndex: number;
-  /** Radial cantilever offset from the audio wiggle at that section (mm). */
-  wiggleMm: number;
-  /** Groove depth at that section (mm) — drives the vertical compliance. */
-  depthMm: number;
+  /** TRUE audio wall components at the contact section (mm — micrometers in
+   * practice; consumers apply their own labeled exaggeration). */
+  latMm: number;
+  vertMm: number;
 }
 
-/** Full per-frame solution: arm yaw + local cantilever compliance at time t. */
+/** Full per-frame solution: arm yaw + contact-section audio at time t. */
 export function solveStylusPose(
   cfg: ArmConfig,
   geometry: GrooveGeometry,
-  params: SectionParams,
+  view: ChannelView,
   t: number,
 ): StylusPose {
   const duration = geometry.timeS[geometry.timeS.length - 1];
@@ -127,22 +127,17 @@ export function solveStylusPose(
 
   // Pass 1: aim at the smooth spiral radius of the nominally-playing section.
   let section = sectionAtTime(geometry, tc);
-  let sol = solveArmYaw(cfg, centerlineRadius(section, params));
+  let sol = solveArmYaw(cfg, trueRadiusMm(geometry, section));
 
   // Pass 2: the tip touches the groove at world angle beta, i.e. the section
   // playing beta/OMEGA later — re-aim at THAT section's radius.
   const beta = Math.atan2(-sol.tipZ, sol.tipX);
   const tContact = Math.max(0, Math.min(tc + beta / OMEGA, duration));
   section = sectionAtTime(geometry, tContact);
-  sol = solveArmYaw(cfg, centerlineRadius(section, params));
+  sol = solveArmYaw(cfg, trueRadiusMm(geometry, section));
 
-  const sp = sectionPoint(section, params);
-  return {
-    ...sol,
-    sectionIndex: section,
-    wiggleMm: sp.rc - centerlineRadius(section, params),
-    depthMm: sp.depth,
-  };
+  const { latMm, vertMm } = viewComponentsMm(geometry, section, view);
+  return { ...sol, sectionIndex: section, latMm, vertMm };
 }
 
 /**
@@ -151,17 +146,13 @@ export function solveStylusPose(
  *   2. the tip stays exactly effectiveLength from the pivot axis.
  * Returns the worst radius error in mm over sampled times.
  */
-export function validateKinematics(
-  cfg: ArmConfig,
-  geometry: GrooveGeometry,
-  params: SectionParams,
-): number {
+export function validateKinematics(cfg: ArmConfig, geometry: GrooveGeometry): number {
   const duration = geometry.timeS[geometry.timeS.length - 1];
   let worst = 0;
   for (const frac of [0, 0.1, 0.25, 0.5, 0.75, 0.9, 1]) {
-    const pose = solveStylusPose(cfg, geometry, params, frac * duration);
+    const pose = solveStylusPose(cfg, geometry, "both", frac * duration);
     const tipRadius = Math.hypot(pose.tipX, pose.tipZ);
-    const grooveRadius = centerlineRadius(pose.sectionIndex, params);
+    const grooveRadius = trueRadiusMm(geometry, pose.sectionIndex);
     worst = Math.max(worst, Math.abs(tipRadius - grooveRadius));
     const reach = Math.hypot(pose.tipX - cfg.pivotX, pose.tipZ - cfg.pivotZ);
     worst = Math.max(worst, Math.abs(reach - cfg.effectiveLength));

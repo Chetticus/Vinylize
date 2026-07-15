@@ -738,3 +738,33 @@ overruled it is worth less than one that does.
     off the background. Orbit is fenced in the café (distance/polar/azimuth limits) so
     the camera can't leave the built corner of the room or dive under the table; a
     Café/Studio toggle preserves the original minimal look.
+
+14. **v0.6: multiscale groove inspection — the exaggerated ribbon retired.** The
+    always-on 30k-section ribbon (radial spacing ×35) was fundamentally incompatible
+    with "physically plausible groove pitch", so the record moved to TRUE scale with a
+    three-level LOD:
+    *(a) LOD 0/1* — one procedural `ShaderMaterial` on the record surface draws the
+    clip's real turn count at the real 0.25 mm pitch, analytically anti-aliased via
+    `fwidth` with a cross-fade to area-average darkening when rings go sub-pixel (no
+    moiré), plus per-turn loudness banding measured from the user's audio and a
+    circumferential anisotropic streak. Overview→close-up is one continuous shader —
+    no geometry, no texture memory, no pop. Click-to-seek inverts the spiral from the
+    record-local click point (radius pins the turn, angle refines the moment).
+    *(b) LOD 2* — the pipeline now retains a memory-bounded (≤3M samples/channel,
+    band-limited) copy of the engraved spatial groove; a new endpoint
+    `GET /api/session/{id}/groove-window?t=…` serves ~80 mm windows around any playback
+    time as compact binaries (8-float header + two arrays, ~13 KB). The frontend
+    microscope mounts by camera distance (hysteresis), fetches the current turn plus
+    its radial neighbors (the same song ±1.8 s — what physically sits one pitch away),
+    and rebuilds true-scale V-trench strips only on seek/drift/DSP change — never per
+    frame. Stereo modes zero the L+R or L−R arrays, changing the mesh itself.
+    *(c) Honest scale* — pitch/spacing/turn count are never exaggerated; only audio
+    wiggle is magnified, clamped (`safeAudioBoost`) so a groove cannot swing into its
+    neighbor, and disclosed in a persistent label. Notably the "worn record" default mix
+    already swings ~28% of the pitch at true scale, so the clamp lands near ×3 — loud
+    cuts genuinely almost kiss their neighbors. *(d) Micro-stylus* — the macro cantilever
+    hides under the microscope and a true-radius (DSP-scaled) tip takes over, resting in
+    the 90° V at bottom + R√2 (static rest-pose approximation, documented in code); a
+    world-fixed clipping plane just ahead of the stylus provides the cutaway. *(e)* The
+    tonearm IK moved to true radii unchanged in structure (self-check still 0.000 mm),
+    and the readout HUD became closeable with a reopen button.

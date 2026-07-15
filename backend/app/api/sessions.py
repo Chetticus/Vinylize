@@ -38,6 +38,12 @@ class Session:
     # (float, str) tuple swap is atomic enough for a progress bar.
     progress_frac: float = 0.0
     progress_label: str = ""
+    # Retained engraved groove for the microscope endpoint (memory-bounded,
+    # see pipeline.MAX_DETAIL_SAMPLES). Reflects the LAST processed config.
+    detail_lateral: np.ndarray | None = None
+    detail_vertical: np.ndarray | None = None
+    detail_ds_m: float = 0.0
+    detail_start_radius_m: float = 0.0
 
 
 class SessionStore:

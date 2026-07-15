@@ -21,11 +21,35 @@
 import { engine, useStore } from "../../state/store";
 import { OMEGA } from "./grooveMath";
 
+let frozenT: number | null = null;
+
+/** "Freeze record" inspection mode: the deck (disc, arm, readout, microscope
+ * window) holds at the freeze moment while audio keeps playing. */
+export function setFrozen(on: boolean): void {
+  frozenT = on ? rawClipTime() : null;
+}
+
+export function isFrozen(): boolean {
+  return frozenT !== null;
+}
+
+function rawClipTime(): number {
+  return engine.isPlaying ? engine.position() : useStore.getState().positionS;
+}
+
 /** Current clip time in seconds: live engine clock while playing, otherwise
  * the frozen seek position — pause freezes the deck exactly where it stopped. */
 export function clipTime(): number {
-  return engine.isPlaying ? engine.position() : useStore.getState().positionS;
+  return frozenT ?? rawClipTime();
 }
+
+/**
+ * The stylus contact point in world coordinates, written once per frame by
+ * the Tonearm (which already solves the arm pose) and read by the camera
+ * rig, LOD logic, and micro-stylus. A module-level mutable avoids threading
+ * a ref through five components; the single writer is documented here.
+ */
+export const contact = { x: 100, z: 0, radiusMm: 100, depthMm: 0.03, latMm: 0, sectionIndex: 0 };
 
 /** Disc rotation about Y at clip time t (rad). */
 export function discAngle(t: number): number {

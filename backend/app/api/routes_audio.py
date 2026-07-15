@@ -116,6 +116,13 @@ def _process_sync(session: Session, req: schemas.ProcessRequest) -> schemas.Proc
         is_stereo=audio.is_stereo,
     )
 
+    # Hand the retained groove to the inspection endpoint (replaces any
+    # previous config's arrays — the microscope always shows the last render).
+    session.detail_lateral = result.detail_lateral
+    session.detail_vertical = result.detail_vertical
+    session.detail_ds_m = result.detail_ds_m
+    session.detail_start_radius_m = result.start_radius_mm / 1000.0
+
     session.progress_frac, session.progress_label = 0.9, "Encoding audio"
     session.vinyl_wav = _to_wav(result.vinyl, audio.sample_rate)
     session.original_wav = _to_wav(audio.samples, audio.sample_rate)

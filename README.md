@@ -45,7 +45,22 @@ geometric idea:
   a warm, softly-lit listening room (pendant lamps, record shelf, espresso-bar
   silhouette, rainy window with city-light bokeh). The backdrop is pure low-poly
   procedural geometry melted into defocus by atmospheric fog — no 3D assets, no
-  postprocessing pass — and a toggle switches back to a minimal dark studio. The groove is a real V-profile along an
+  postprocessing pass — and a toggle switches back to a minimal dark studio.
+
+- **Multiscale groove microscope**: the record is rendered at TRUE scale across three
+  levels of detail. From turntable distance the recorded band reads as satin (an
+  analytically anti-aliased procedural shader draws your clip's real turn count at the
+  real ~0.25 mm pitch, with per-turn loudness banding measured from your audio — a
+  3-minute clip really is ~100 tightly packed turns). Zoom closer and individual turns
+  resolve continuously — same shader, no LOD pop. Within ~5 cm of the stylus the
+  microscope wakes: the backend serves an 80 mm window of the *actual engraved groove*
+  around the playback position (plus the adjacent turns — the same song ±1.8 s, which is
+  what physically sits 0.25 mm away), rebuilt as a true-scale V-trench whose centerline
+  swings with L+R and whose walls/depth breathe with L−R. A cutaway slices the trench at
+  the stylus so you can watch the true-size (DSP-scaled) tip ride the walls; only the
+  audio wiggle is magnified, clamped so grooves can never collide, and a persistent label
+  discloses the exaggeration. Stereo view modes (Full / L+R / L−R) change the geometry
+  itself, not its color. The groove is a real V-profile along an
   Archimedean spiral: lateral wiggle is the mono sum, depth breathing is the stereo
   difference (the actual Westrex 45/45 geometry). Press play and the record spins at a
   true 33⅓ RPM while the arm tracks the groove inward. Orbit, zoom, click the groove to

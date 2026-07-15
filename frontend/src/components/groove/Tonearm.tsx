@@ -33,8 +33,9 @@ import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 
 import type { GrooveGeometry } from "../../types/api";
-import { BASE_DEPTH_MM, type SectionParams } from "./grooveMath";
-import { clipTime } from "./recordMotion";
+import { type ChannelView } from "./grooveMath";
+import { ARM_WIGGLE_EXAG } from "./grooveScale";
+import { clipTime, contact } from "./recordMotion";
 import { ARM, solveStylusPose } from "./tonearmKinematics";
 
 const L = ARM.effectiveLength;
@@ -42,11 +43,14 @@ const CANTILEVER_HOME: [number, number, number] = [2, -2.5, 0];
 
 interface Props {
   geometry: GrooveGeometry;
-  params: SectionParams;
+  view: ChannelView;
+  /** Microscope zoom active: the macro cantilever/tip hide so the true-scale
+   * micro-stylus (GrooveInspectionMesh) can take over at the same spot. */
+  microscope?: boolean;
   debug?: boolean;
 }
 
-export default function Tonearm({ geometry, params, debug = false }: Props) {
+export default function Tonearm({ geometry, view, microscope = false, debug = false }: Props) {
   const assembly = useRef<THREE.Group>(null);
   const cantilever = useRef<THREE.Group>(null);
   const tipMesh = useRef<THREE.Mesh>(null);
@@ -58,20 +62,30 @@ export default function Tonearm({ geometry, params, debug = false }: Props) {
   // Canvas, so it runs even when WebGL frames are suspended.)
 
   useFrame(() => {
-    const pose = solveStylusPose(ARM, geometry, params, clipTime());
+    const pose = solveStylusPose(ARM, geometry, view, clipTime());
     if (assembly.current) assembly.current.rotation.y = pose.yaw;
 
+    // Publish the contact point (single writer — see recordMotion.contact).
+    const tipR = Math.hypot(pose.tipX, pose.tipZ) || 1;
+    contact.x = pose.tipX;
+    contact.z = pose.tipZ;
+    contact.radiusMm = tipR;
+    contact.latMm = pose.latMm;
+    contact.depthMm = pose.vertMm;
+    contact.sectionIndex = pose.sectionIndex;
+
     if (cantilever.current) {
-      // Decompose the radial wiggle into the assembly's local axes:
-      // local +X_world = (cos yaw, -sin yaw), local +Z_world = (sin yaw, cos yaw).
-      const tipR = Math.hypot(pose.tipX, pose.tipZ) || 1;
+      // Cosmetic, labeled x50 vibration (true wiggle is micrometers — the
+      // honest version lives in the microscope). Decompose the radial offset
+      // into the assembly's local axes: local +X_world = (cos yaw, -sin yaw),
+      // local +Z_world = (sin yaw, cos yaw).
+      const wiggle = pose.latMm * ARM_WIGGLE_EXAG;
       const ux = pose.tipX / tipR;
       const uz = pose.tipZ / tipR;
-      const dxLocal = pose.wiggleMm * (ux * Math.cos(pose.yaw) - uz * Math.sin(pose.yaw));
-      const dzLocal = pose.wiggleMm * (ux * Math.sin(pose.yaw) + uz * Math.cos(pose.yaw));
-      // Vertical compliance: the stylus sinks slightly into deeper groove
-      // sections (stereo-difference content breathes the V's depth).
-      const dyLocal = -0.25 * (pose.depthMm - BASE_DEPTH_MM);
+      const dxLocal = wiggle * (ux * Math.cos(pose.yaw) - uz * Math.sin(pose.yaw));
+      const dzLocal = wiggle * (ux * Math.sin(pose.yaw) + uz * Math.cos(pose.yaw));
+      // Vertical compliance from the stereo-difference (depth) component.
+      const dyLocal = -Math.min(Math.abs(pose.vertMm) * ARM_WIGGLE_EXAG * 0.5, 1.2);
       cantilever.current.position.set(
         CANTILEVER_HOME[0] + dxLocal,
         CANTILEVER_HOME[1] + dyLocal,
@@ -80,9 +94,8 @@ export default function Tonearm({ geometry, params, debug = false }: Props) {
     }
 
     if (debug && debugTarget.current && debugTip.current && tipMesh.current) {
-      // Calculated groove target (radius incl. wiggle, at the contact angle)…
-      const tipR = Math.hypot(pose.tipX, pose.tipZ) || 1;
-      const targetR = tipR + pose.wiggleMm;
+      // Calculated groove target (radius incl. displayed wiggle)…
+      const targetR = tipR + pose.latMm * ARM_WIGGLE_EXAG;
       debugTarget.current.position.set(
         (pose.tipX / tipR) * targetR,
         0.6,
@@ -150,7 +163,10 @@ export default function Tonearm({ geometry, params, debug = false }: Props) {
               </mesh>
 
               {/* ============ cantilever (compliance) ============ */}
-              <group ref={cantilever} position={CANTILEVER_HOME}>
+              {/* Hidden under the microscope: at true groove scale this
+                  display-scale cantilever/tip would dwarf the trench; the
+                  micro-stylus in GrooveInspectionMesh replaces it. */}
+              <group ref={cantilever} position={CANTILEVER_HOME} visible={!microscope}>
                 {/* Rod from the cartridge face down to the tip */}
                 <mesh
                   position={[1.3, -0.2, 0]}

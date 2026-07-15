@@ -20,10 +20,16 @@ src/
     Sidebar.tsx        upload / demo / file info / concepts
     Transport.tsx      play, sample-synced Original<->Vinyl switch, seek
     Waveform.tsx       canvas min/max peak renderer
-    groove/            r3f turntable: TurntableScene (deck, lighting, record group),
-                       Tonearm (strict pivot hierarchy), tonearmKinematics (analytic
-                       circle-intersection IK, documented derivation), recordMotion
-                       (clock/phase/status), GrooveMesh, grooveMath, labelTexture
+    groove/            r3f turntable + multiscale groove inspector:
+                       TurntableScene (deck, lighting, LOD wiring), RecordSurface +
+                       GrooveOverviewMaterial (true-pitch procedural groove shader,
+                       LOD 0-1), GrooveInspectionMesh (microscope V-trench from the
+                       backend groove-window endpoint + MicroStylus + cutaway, LOD 2),
+                       grooveLod (strategy + camera presets), grooveScale (honest-scale
+                       policy), Tonearm (strict pivot hierarchy), tonearmKinematics
+                       (analytic circle-intersection IK), recordMotion (clock/phase/
+                       contact), grooveMath (true-scale spiral math), CafeEnvironment,
+                       labelTexture (procedural canvas textures)
     tabs/              Waveform · 3D Groove · Compare · Explorer · DSP Controls
   types/api.ts         mirrors backend Pydantic schemas
 ```

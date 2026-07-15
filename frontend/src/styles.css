@@ -422,6 +422,88 @@ canvas.waveform { width: 100%; height: 130px; display: block; border-radius: 6px
 .readout-chip.status-paused { border-color: var(--accent-dim); }
 .readout-chip.status-paused b { color: var(--accent); }
 
+/* ---- multiscale inspector overlays ---- */
+
+.groove-panel {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 172px;
+  background: rgba(13, 13, 16, 0.85);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  backdrop-filter: blur(4px);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: calc(100% - 24px);
+  overflow-y: auto;
+}
+.groove-panel h4 {
+  margin: 0 0 6px;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-dim);
+}
+.groove-panel .panel-section { display: flex; flex-direction: column; gap: 5px; }
+.groove-panel .btn.block { width: 100%; text-align: left; }
+.panel-check {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+.panel-check input { accent-color: var(--accent); }
+.panel-slider {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11.5px;
+  color: var(--text-dim);
+}
+.panel-slider input[type="range"] { width: 100%; accent-color: var(--accent); }
+
+.groove-hud { padding-right: 30px; }
+.hud-close {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  appearance: none;
+  border: none;
+  background: none;
+  color: var(--text-dim);
+  font-size: 13px;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 5px;
+}
+.hud-close:hover { color: var(--text); background: var(--bg-inset); }
+.hud-reopen {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  background: rgba(13, 13, 16, 0.85);
+  backdrop-filter: blur(4px);
+}
+
+.scale-label {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  max-width: 400px;
+  background: rgba(13, 13, 16, 0.85);
+  border: 1px solid var(--accent-dim);
+  border-radius: 8px;
+  padding: 7px 12px;
+  font-size: 11.5px;
+  color: var(--accent);
+  backdrop-filter: blur(4px);
+}
+
 /* ------------------------------------------------------------ status --- */
 
 .statusbar {

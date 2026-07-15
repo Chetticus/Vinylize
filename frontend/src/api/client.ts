@@ -8,6 +8,7 @@ import type {
   AnalyzeResponse,
   GeometryMeta,
   GrooveGeometry,
+  GrooveWindow,
   ProcessConfig,
   ProcessResponse,
 } from "../types/api";
@@ -55,6 +56,37 @@ export async function processAudio(
 export async function fetchAudioBuffer(url: string, ctx: AudioContext): Promise<AudioBuffer> {
   const res = await expectOk(await fetch(url));
   return ctx.decodeAudioData(await res.arrayBuffer());
+}
+
+/** Fetch + parse a microscope groove window (layout: backend detail_window.py:
+ * 8-float header, then lateral_mm[n], vertical_mm[n]). */
+export async function fetchGrooveWindow(
+  sessionId: string,
+  t: number,
+  spanMm = 80,
+  maxPoints = 2000,
+): Promise<GrooveWindow> {
+  const url =
+    `/api/session/${sessionId}/groove-window?t=${t.toFixed(3)}` +
+    `&span_mm=${spanMm}&max_points=${maxPoints}`;
+  const res = await expectOk(await fetch(url));
+  const f = new Float32Array(await res.arrayBuffer());
+  const n = f[0] | 0;
+  if (f.length !== 8 + 2 * n) {
+    throw new Error(`groove window payload mismatch: ${f.length} != ${8 + 2 * n}`);
+  }
+  return {
+    n,
+    dsMm: f[1],
+    s0Mm: f[2],
+    t0S: f[3],
+    rCenterMm: f[4],
+    pitchMm: f[5],
+    turnPeriodS: f[6],
+    durationS: f[7],
+    latMm: f.subarray(8, 8 + n),
+    vertMm: f.subarray(8 + n, 8 + 2 * n),
+  };
 }
 
 /** Parse the raw float32 blob into its five arrays (layout: see GeometryMeta). */

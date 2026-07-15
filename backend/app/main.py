@@ -9,6 +9,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes_audio import router as audio_router
+from app.api.routes_groove_detail import router as groove_detail_router
 
 app = FastAPI(
     title="Vinylize",
@@ -26,6 +27,7 @@ app.add_middleware(
 )
 
 app.include_router(audio_router)
+app.include_router(groove_detail_router)
 
 
 @app.get("/api/health")

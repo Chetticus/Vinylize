@@ -90,6 +90,27 @@ export interface ProcessResponse {
   geometry_url: string;
 }
 
+/**
+ * Parsed groove-window payload from /api/session/{id}/groove-window —
+ * a short high-resolution slice of the engraved groove around a playback
+ * time, used by the 3D microscope (see backend detail_window.py).
+ * All lengths in millimeters.
+ */
+export interface GrooveWindow {
+  n: number;
+  dsMm: number;
+  s0Mm: number;
+  /** Nominal playback time of the window's first sample (s). */
+  t0S: number;
+  rCenterMm: number;
+  pitchMm: number;
+  /** One revolution at 33 1/3 RPM (~1.8 s) — adjacent-turn time offset. */
+  turnPeriodS: number;
+  durationS: number;
+  latMm: Float32Array;
+  vertMm: Float32Array;
+}
+
 /** Parsed form of the binary geometry payload (5 x n_points float32). */
 export interface GrooveGeometry {
   meta: GeometryMeta;
