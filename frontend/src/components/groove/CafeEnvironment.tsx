@@ -19,7 +19,7 @@
 import { useEffect, useMemo } from "react";
 import * as THREE from "three";
 
-import { makeWindowTexture, makeWoodTexture } from "./labelTexture";
+import { makePosterTexture, makeWindowTexture, makeWoodTexture } from "./labelTexture";
 
 const TABLE_TOP_Y = -54.4;
 const FLOOR_Y = -450;
@@ -46,7 +46,9 @@ function Table() {
           the deck sits on it and its shadows land here. */}
       <mesh receiveShadow position={[35, TABLE_TOP_Y - 16, -10]}>
         <boxGeometry args={[980, 32, 660]} />
-        <meshStandardMaterial map={wood} roughness={0.55} metalness={0.05} />
+        {/* Waxed walnut: low-mid roughness + env reflections give the wood a
+            believable sheen where the window light rakes across it. */}
+        <meshStandardMaterial map={wood} roughness={0.48} metalness={0.06} envMapIntensity={0.6} />
       </mesh>
       {/* Apron + legs. */}
       <mesh position={[35, TABLE_TOP_Y - 46, -10]}>
@@ -79,24 +81,25 @@ function Room() {
         <planeGeometry args={[7000, 7000]} />
         <meshStandardMaterial color="#191411" roughness={0.9} />
       </mesh>
-      {/* Back wall — deep desaturated green with a wood wainscot band. */}
+      {/* Back wall — desaturated sage with a walnut wainscot band; values
+          lifted from v0.5 so the room reads warm, not dim. */}
       <mesh position={[0, 350, -1550]}>
         <planeGeometry args={[6000, 2600]} />
-        <meshStandardMaterial color="#22322b" roughness={0.95} />
+        <meshStandardMaterial color="#2c3d34" roughness={0.95} />
       </mesh>
       <mesh position={[0, -220, -1544]}>
         <planeGeometry args={[6000, 460]} />
-        <meshStandardMaterial color="#33241a" roughness={0.8} />
+        <meshStandardMaterial color="#3f2d1e" roughness={0.8} />
       </mesh>
-      {/* Left wall — deep navy. */}
+      {/* Left wall — deep slate blue (the window wall). */}
       <mesh position={[-1650, 350, 0]} rotation={[0, Math.PI / 2, 0]}>
         <planeGeometry args={[6000, 2600]} />
-        <meshStandardMaterial color="#1d2733" roughness={0.95} />
+        <meshStandardMaterial color="#26313f" roughness={0.95} />
       </mesh>
       {/* Right wall (encloses the constrained orbit range). */}
       <mesh position={[1750, 350, 0]} rotation={[0, -Math.PI / 2, 0]}>
         <planeGeometry args={[6000, 2600]} />
-        <meshStandardMaterial color="#22322b" roughness={0.95} />
+        <meshStandardMaterial color="#2c3d34" roughness={0.95} />
       </mesh>
 
       {/* Rainy window on the left wall: night bokeh, brass frame. The glass
@@ -205,6 +208,17 @@ function RecordShelf() {
           <meshStandardMaterial color={s.color} roughness={0.85} />
         </mesh>
       ))}
+      {/* A short horizontal book stack finishing the upper shelf. */}
+      {[
+        { y: 56, w: 150, h: 26, color: "#6b4438" },
+        { y: 80, w: 132, h: 22, color: "#4f6058" },
+        { y: 101, w: 140, h: 20, color: "#96865f" },
+      ].map((b, i) => (
+        <mesh key={`book${i}`} position={[-330 + i * 6, b.y, 10]}>
+          <boxGeometry args={[b.w, b.h, 90]} />
+          <meshStandardMaterial color={b.color} roughness={0.85} />
+        </mesh>
+      ))}
     </group>
   );
 }
@@ -253,6 +267,90 @@ function CoffeeBar() {
   );
 }
 
+/** Architect-style desk lamp beside the tonearm — the geometry behind the
+ * warm practical light in CafeLights (positioned to match its point light). */
+function DeskLamp() {
+  return (
+    <group position={[330, TABLE_TOP_Y, -60]}>
+      {/* Weighted base */}
+      <mesh castShadow position={[0, 4, 0]}>
+        <cylinderGeometry args={[26, 30, 8, 24]} />
+        <meshStandardMaterial color="#26262c" metalness={0.6} roughness={0.4} />
+      </mesh>
+      {/* Stem: two segments with an elbow */}
+      <mesh castShadow position={[-8, 60, 8]} rotation={[0.12, 0, 0.18]}>
+        <cylinderGeometry args={[3, 3, 110, 10]} />
+        <meshStandardMaterial color="#b8bcc4" metalness={0.9} roughness={0.3} />
+      </mesh>
+      <mesh castShadow position={[-32, 140, 20]} rotation={[0.3, 0, 0.75]}>
+        <cylinderGeometry args={[2.6, 2.6, 90, 10]} />
+        <meshStandardMaterial color="#b8bcc4" metalness={0.9} roughness={0.3} />
+      </mesh>
+      {/* Shade aimed at the tonearm area */}
+      <group position={[-68, 172, 28]} rotation={[0.5, 0.7, 1.0]}>
+        <mesh castShadow>
+          <coneGeometry args={[26, 36, 24, 1, true]} />
+          <meshStandardMaterial
+            color="#2c2d33"
+            metalness={0.7}
+            roughness={0.35}
+            side={THREE.DoubleSide}
+          />
+        </mesh>
+        <mesh position={[0, -8, 0]}>
+          <sphereGeometry args={[9, 14, 14]} />
+          <meshBasicMaterial color="#ffd9a0" fog={false} toneMapped={false} />
+        </mesh>
+      </group>
+    </group>
+  );
+}
+
+/** Framed RIAA-curve print on the back wall — education as décor. */
+function Poster() {
+  const tex = useMemo(() => makePosterTexture(), []);
+  useEffect(() => () => tex.dispose(), [tex]);
+  return (
+    <group position={[420, 320, -1540]}>
+      <mesh>
+        <boxGeometry args={[340, 440, 14]} />
+        <meshStandardMaterial color="#3f2d1e" roughness={0.6} />
+      </mesh>
+      <mesh position={[0, 0, 8]}>
+        <planeGeometry args={[308, 408]} />
+        <meshStandardMaterial map={tex} roughness={0.85} />
+      </mesh>
+    </group>
+  );
+}
+
+/** Small potted plant on the table's far corner. */
+function Plant() {
+  return (
+    <group position={[-420, TABLE_TOP_Y, -190]}>
+      <mesh castShadow position={[0, 22, 0]}>
+        <cylinderGeometry args={[26, 20, 44, 16]} />
+        <meshStandardMaterial color="#8a5a38" roughness={0.7} />
+      </mesh>
+      <mesh position={[0, 44, 0]}>
+        <cylinderGeometry args={[23, 23, 4, 16]} />
+        <meshStandardMaterial color="#2a1c10" roughness={0.9} />
+      </mesh>
+      {/* A few broad leaves — enough silhouette, no botany. */}
+      {[0, 1.1, 2.4, 3.6, 4.9].map((a, i) => (
+        <mesh
+          key={a}
+          position={[Math.cos(a) * 14, 78 + (i % 2) * 16, Math.sin(a) * 14]}
+          rotation={[0.45 + (i % 3) * 0.16, a, 0]}
+        >
+          <sphereGeometry args={[17, 8, 6]} />
+          <meshStandardMaterial color={i % 2 ? "#3d5a3a" : "#48684a"} roughness={0.8} />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
 function CoffeeCup() {
   return (
     <group position={[-360, 0, 150]}>
@@ -286,7 +384,10 @@ export default function CafeEnvironment() {
       <RecordShelf />
       <CoffeeBar />
       <CoffeeCup />
-      {/* Near pendant motivates the key light; the far two are set dressing. */}
+      <DeskLamp />
+      <Poster />
+      <Plant />
+      {/* Pendants: near one for specular life, far two as set dressing. */}
       <Pendant position={[-180, 160, 90]} />
       <Pendant position={[-720, 120, -950]} scale={0.8} />
       <Pendant position={[260, 130, -1080]} scale={0.7} />

@@ -54,7 +54,9 @@ export async function processAudio(
 }
 
 export async function fetchAudioBuffer(url: string, ctx: AudioContext): Promise<AudioBuffer> {
-  const res = await expectOk(await fetch(url));
+  // Re-processing a session reuses this URL. Never let browser caching make
+  // the A/B control silently play a previous render.
+  const res = await expectOk(await fetch(url, { cache: "no-store" }));
   return ctx.decodeAudioData(await res.arrayBuffer());
 }
 
@@ -69,7 +71,7 @@ export async function fetchGrooveWindow(
   const url =
     `/api/session/${sessionId}/groove-window?t=${t.toFixed(3)}` +
     `&span_mm=${spanMm}&max_points=${maxPoints}`;
-  const res = await expectOk(await fetch(url));
+  const res = await expectOk(await fetch(url, { cache: "no-store" }));
   const f = new Float32Array(await res.arrayBuffer());
   const n = f[0] | 0;
   if (f.length !== 8 + 2 * n) {
@@ -91,7 +93,7 @@ export async function fetchGrooveWindow(
 
 /** Parse the raw float32 blob into its five arrays (layout: see GeometryMeta). */
 export async function fetchGeometry(url: string, meta: GeometryMeta): Promise<GrooveGeometry> {
-  const res = await expectOk(await fetch(url));
+  const res = await expectOk(await fetch(url, { cache: "no-store" }));
   const raw = await res.arrayBuffer();
   const n = meta.n_points;
   const f32 = new Float32Array(raw);

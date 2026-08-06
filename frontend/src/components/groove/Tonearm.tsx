@@ -39,7 +39,19 @@ import { clipTime, contact } from "./recordMotion";
 import { ARM, solveStylusPose } from "./tonearmKinematics";
 
 const L = ARM.effectiveLength;
-const CANTILEVER_HOME: [number, number, number] = [2, -2.5, 0];
+// Home offset of the cantilever group, chosen so the stylus cone's APEX lands
+// at assembly-local (229, -14.36) = world (effectiveLength, -0.36): exactly
+// the arm's reach and exactly the record surface plane. Derivation:
+//   apex(cantilever-local) = (6, -2.4)
+//   + cantilever home      = (2, hy)
+//   + cartridge  @ headshell-local (5, -4)
+//   + headshell  @ assembly-local  (216, -5)
+//   => apex(assembly-local) = (229, -11.4 + hy); assembly sits at world
+//      y = ARM.armPlaneY (14), so hy = -2.96 puts the apex at world y -0.36.
+const CANTILEVER_HOME: [number, number, number] = [2, -2.96, 0];
+// Compliance may push the tip at most this far below the surface (a hair of
+// visual "seating"), never deep enough to stab through the disc.
+const MAX_COMPLIANCE_MM = 0.25;
 
 interface Props {
   geometry: GrooveGeometry;
@@ -84,8 +96,9 @@ export default function Tonearm({ geometry, view, microscope = false, debug = fa
       const uz = pose.tipZ / tipR;
       const dxLocal = wiggle * (ux * Math.cos(pose.yaw) - uz * Math.sin(pose.yaw));
       const dzLocal = wiggle * (ux * Math.sin(pose.yaw) + uz * Math.cos(pose.yaw));
-      // Vertical compliance from the stereo-difference (depth) component.
-      const dyLocal = -Math.min(Math.abs(pose.vertMm) * ARM_WIGGLE_EXAG * 0.5, 1.2);
+      // Vertical compliance from the stereo-difference (depth) component,
+      // clamped so the tip never visibly pierces the record surface.
+      const dyLocal = -Math.min(Math.abs(pose.vertMm) * ARM_WIGGLE_EXAG * 0.5, MAX_COMPLIANCE_MM);
       cantilever.current.position.set(
         CANTILEVER_HOME[0] + dxLocal,
         CANTILEVER_HOME[1] + dyLocal,
@@ -130,13 +143,15 @@ export default function Tonearm({ geometry, view, microscope = false, debug = fa
             rotation={[0, 0, Math.atan2(-5, 202) - Math.PI / 2]}
           >
             <cylinderGeometry args={[1.7, 2.5, 202, 12]} />
-            <meshStandardMaterial color="#c9cad0" metalness={0.85} roughness={0.22} />
+            {/* Brushed aluminum: high metalness, mid roughness — the env map
+                gives it the long soft reflections of a machined tube. */}
+            <meshStandardMaterial color="#b8bcc4" metalness={0.92} roughness={0.3} envMapIntensity={1.1} />
           </mesh>
 
           {/* Counterweight behind the pivot */}
           <mesh castShadow position={[-21, 1.5, 0]} rotation={[0, 0, Math.PI / 2]}>
             <cylinderGeometry args={[8.5, 8.5, 15, 24]} />
-            <meshStandardMaterial color="#1a1a20" metalness={0.85} roughness={0.3} />
+            <meshStandardMaterial color="#2c2d33" metalness={0.85} roughness={0.38} envMapIntensity={0.8} />
           </mesh>
           <mesh position={[-10, 1.5, 0]} rotation={[0, 0, Math.PI / 2]}>
             <cylinderGeometry args={[1.8, 1.8, 16, 10]} />
@@ -167,19 +182,26 @@ export default function Tonearm({ geometry, view, microscope = false, debug = fa
                   display-scale cantilever/tip would dwarf the trench; the
                   micro-stylus in GrooveInspectionMesh replaces it. */}
               <group ref={cantilever} position={CANTILEVER_HOME} visible={!microscope}>
-                {/* Rod from the cartridge face down to the tip */}
-                <mesh
-                  position={[1.3, -0.2, 0]}
-                  rotation={[0, 0, Math.atan2(-4, 8.6) - Math.PI / 2]}
-                >
-                  <cylinderGeometry args={[0.35, 0.35, 9.5, 8]} />
-                  <meshStandardMaterial color="#d8d8de" metalness={0.9} roughness={0.2} />
+                {/* Cantilever rod: runs from inside the cartridge body (A) to
+                    the stylus base (B), tapering thin toward the tip.
+                      A = (-1, 1.2)  -> buried in the cartridge box
+                      B = ( 6, -0.8) -> the cone's base CENTRE
+                    Length |B-A| = sqrt(53) = 7.2801, midpoint (2.5, 0.2), and
+                    the rotation aligns local +Y (the cylinder's axis, and the
+                    radiusTop end) with the A->B direction, so the thin end
+                    meets the stylus. The two parts share point B, so they read
+                    as one piece — previously the rod stopped short at
+                    (5.6, -2.2), beside the cone's point rather than in its
+                    base, which is why the needle looked detached. */}
+                <mesh position={[2.5, 0.2, 0]} rotation={[0, 0, -1.8491]}>
+                  <cylinderGeometry args={[0.3, 0.42, 7.2801, 10]} />
+                  <meshStandardMaterial color="#d2d4da" metalness={0.9} roughness={0.22} />
                 </mesh>
-                {/* Stylus tip: apex at assembly-local (L, -armPlaneY, 0) — the
+                {/* Stylus: base at B, apex straight down at (6, -2.4) — the
                     exact point the IK solves for. Warm-lit so the eye finds
                     the playback point, but no bloom/neon. */}
-                <mesh ref={tipMesh} position={[6, -1.3, 0]} rotation={[0, 0, Math.PI]}>
-                  <coneGeometry args={[0.55, 2.4, 12]} />
+                <mesh ref={tipMesh} position={[6, -1.6, 0]} rotation={[0, 0, Math.PI]}>
+                  <coneGeometry args={[0.5, 1.6, 14]} />
                   <meshStandardMaterial
                     color="#f2a33c"
                     emissive="#f2a33c"

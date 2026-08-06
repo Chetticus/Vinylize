@@ -1,44 +1,64 @@
 /**
- * The record's top surface: a flat annulus carrying the procedural groove
- * shader (LOD 0-1 — see GrooveOverviewMaterial.ts for the strategy).
+ * The record's playing surface: a flat annulus with POLAR UVs carrying the
+ * standard-material vinyl (technique + groove layout documented in
+ * GrooveOverviewMaterial.ts).
+ *
+ * The UV rewrite is the whole trick: RingGeometry ships planar UVs, but we
+ * remap them to u = angle / 2pi, v = radius fraction, so a single 16 x 4096
+ * texture strip describes the disc purely by radius and wraps seamlessly
+ * (the strip's wrapS is Repeat and its content is u-invariant).
  *
  * Rendered in RECORD-LOCAL coordinates inside the spinning record group, so
- * the pattern (and the loudness banding of the user's track) physically
- * rotates. Clicking the surface seeks playback: the click point is taken to
- * record-local space (undoing the current rotation), the radius pins which
- * turn was hit, and the local angle refines the exact moment within that
- * turn — the same spiral inversion the backend uses, run in reverse.
+ * the rings and the loudness banding of the user's track physically rotate.
+ * Clicking the surface seeks playback via the inverse spiral map.
  */
 
 import { useEffect, useMemo } from "react";
 import type { ThreeEvent } from "@react-three/fiber";
+import * as THREE from "three";
 
 import type { GrooveGeometry } from "../../types/api";
 import {
-  buildLoudnessTexture,
-  makeGrooveOverviewMaterial,
-  type OverviewLightRig,
+  SURFACE_R_IN,
+  SURFACE_R_OUT,
+  makeVinylSurfaceMaterial,
 } from "./GrooveOverviewMaterial";
 import { timeAtLocalPoint } from "./grooveMath";
 
 interface Props {
   geometry: GrooveGeometry;
-  lightRig: OverviewLightRig;
   onScrub: (t: number) => void;
 }
 
-export default function RecordSurface({ geometry, lightRig, onScrub }: Props) {
-  const loudness = useMemo(() => buildLoudnessTexture(geometry), [geometry]);
-  const material = useMemo(
-    () => makeGrooveOverviewMaterial(geometry, loudness, lightRig),
-    [geometry, loudness, lightRig],
-  );
+function makePolarRing(): THREE.RingGeometry {
+  // 720 angular segments keep the rim chord error at ~1.4 um — far below a
+  // groove pitch, so the rings can never scallop.
+  const geo = new THREE.RingGeometry(SURFACE_R_IN, SURFACE_R_OUT, 720, 1);
+  const pos = geo.attributes.position;
+  const uv = geo.attributes.uv;
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i);
+    const y = pos.getY(i);
+    const r = Math.hypot(x, y);
+    uv.setXY(
+      i,
+      Math.atan2(y, x) / (2 * Math.PI) + 0.5,
+      (r - SURFACE_R_IN) / (SURFACE_R_OUT - SURFACE_R_IN),
+    );
+  }
+  uv.needsUpdate = true;
+  return geo;
+}
+
+export default function RecordSurface({ geometry, onScrub }: Props) {
+  const ringGeo = useMemo(() => makePolarRing(), []);
+  const surface = useMemo(() => makeVinylSurfaceMaterial(geometry), [geometry]);
   useEffect(
     () => () => {
-      loudness.dispose();
-      material.dispose();
+      surface.dispose();
+      ringGeo.dispose();
     },
-    [loudness, material],
+    [surface, ringGeo],
   );
 
   const durationS = geometry.timeS[geometry.timeS.length - 1];
@@ -52,15 +72,15 @@ export default function RecordSurface({ geometry, lightRig, onScrub }: Props) {
   };
 
   return (
-    // Annulus from label edge to record rim, a hair above the vinyl body
-    // (top at -0.4) so the shader surface wins the depth test cleanly.
+    // A hair above the vinyl body (top at -0.4) so the surface wins the
+    // depth test cleanly.
     <mesh
       position={[0, -0.36, 0]}
       rotation={[-Math.PI / 2, 0, 0]}
-      material={material}
+      geometry={ringGeo}
+      material={surface.material}
+      receiveShadow
       onClick={handleClick}
-    >
-      <ringGeometry args={[50.5, 151.5, 256, 1]} />
-    </mesh>
+    />
   );
 }

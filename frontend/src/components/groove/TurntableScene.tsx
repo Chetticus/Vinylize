@@ -23,11 +23,11 @@ import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import * as THREE from "three";
+import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 
 import type { GrooveGeometry } from "../../types/api";
 import CafeEnvironment from "./CafeEnvironment";
 import GrooveInspectionMesh, { MicroStylus } from "./GrooveInspectionMesh";
-import type { OverviewLightRig } from "./GrooveOverviewMaterial";
 import RecordSurface from "./RecordSurface";
 import Tonearm from "./Tonearm";
 import { type ChannelView } from "./grooveMath";
@@ -38,7 +38,7 @@ import {
   poseFor,
   type LodMode,
 } from "./grooveLod";
-import { makeLabelTexture, makeSheenTexture } from "./labelTexture";
+import { makeLabelTexture } from "./labelTexture";
 import { clipTime, contact, discAngle } from "./recordMotion";
 
 export type EnvironmentKind = "cafe" | "studio";
@@ -67,13 +67,59 @@ interface Props {
   onMicroActive: (active: boolean) => void;
 }
 
-/** Spins its children as the platter: rotation.y = discAngle(clipTime()). */
+/**
+ * Image-based lighting from three's built-in RoomEnvironment (a procedural
+ * lit studio box, PMREM-filtered once at mount — no HDR downloads, no CSP
+ * concerns). This is what makes the glossy black vinyl, clearcoat and
+ * brushed aluminum read as SHAPE: their form comes from reflections, not
+ * from brightening the materials.
+ */
+function EnvironmentReflections({ intensity }: { intensity: number }) {
+  const gl = useThree((s) => s.gl);
+  const scene = useThree((s) => s.scene);
+  useEffect(() => {
+    const pmrem = new THREE.PMREMGenerator(gl);
+    const envMap = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+    scene.environment = envMap;
+    return () => {
+      scene.environment = null;
+      envMap.dispose();
+      pmrem.dispose();
+    };
+  }, [gl, scene]);
+  useEffect(() => {
+    scene.environmentIntensity = intensity;
+  }, [scene, intensity]);
+  return null;
+}
+
+/** Pressing eccentricity shown visually (mm). The DSP already models the
+ * off-center spindle hole as wow; this is the same defect made visible: the
+ * record's groove pattern orbits the spindle by a fraction of a millimeter,
+ * so the rim and rings visibly breathe once per revolution — the strongest
+ * "it is actually spinning" cue a real deck gives you. */
+const ECCENTRICITY_MM = 0.45; // IEC allows up to ~0.9 mm; this is a mid case
+
+/** Spins its children as the platter: rotation.y = discAngle(clipTime()).
+ * An inner group carries the eccentric offset IN THE ROTATING FRAME (that is
+ * what makes it wobble rather than sit still), fading to zero as the camera
+ * closes in so the microscope trench stays exactly under the stylus. */
 function SpinningRecord({ children }: { children: React.ReactNode }) {
-  const ref = useRef<THREE.Group>(null);
+  const rot = useRef<THREE.Group>(null);
+  const off = useRef<THREE.Group>(null);
+  const camera = useThree((s) => s.camera);
   useFrame(() => {
-    if (ref.current) ref.current.rotation.y = discAngle(clipTime());
+    if (rot.current) rot.current.rotation.y = discAngle(clipTime());
+    if (off.current) {
+      const d = camera.position.length();
+      off.current.position.x = ECCENTRICITY_MM * THREE.MathUtils.smoothstep(d, 120, 320);
+    }
   });
-  return <group ref={ref}>{children}</group>;
+  return (
+    <group ref={rot}>
+      <group ref={off}>{children}</group>
+    </group>
+  );
 }
 
 /** Distance-gated microscope visibility with hysteresis (no flicker). */
@@ -100,40 +146,36 @@ function MicroGate({ onChange }: { onChange: (active: boolean) => void }) {
 function Record({
   geometry,
   filename,
-  lightRig,
   onScrub,
   children,
 }: {
   geometry: GrooveGeometry;
   filename: string;
-  lightRig: OverviewLightRig;
   onScrub: (t: number) => void;
   children?: React.ReactNode;
 }) {
   const labelTex = useMemo(() => makeLabelTexture(filename), [filename]);
-  const sheenTex = useMemo(() => makeSheenTexture(), []);
   useEffect(() => () => labelTex.dispose(), [labelTex]);
 
   return (
     <SpinningRecord>
-      {/* Vinyl body (sides + thickness); the top face is RecordSurface. */}
+      {/* Vinyl body (sides + thickness); the top face is RecordSurface.
+          Polished black PVC: near-black base, hard clearcoat — its shape is
+          drawn entirely by environment + light reflections. */}
       <mesh castShadow receiveShadow position={[0, -2.4, 0]}>
         <cylinderGeometry args={[152, 152, 4, 128]} />
         <meshPhysicalMaterial
-          color="#0b0b0d"
-          roughness={0.42}
+          color="#0d0d10"
+          roughness={0.34}
           metalness={0.05}
-          clearcoat={0.7}
-          clearcoatRoughness={0.35}
+          clearcoat={1.0}
+          clearcoatRoughness={0.14}
+          envMapIntensity={1.25}
         />
       </mesh>
-      <RecordSurface geometry={geometry} lightRig={lightRig} onScrub={onScrub} />
-      {/* Faint rotating micro-scratch sheen so the spin reads everywhere. */}
-      <mesh position={[0, -0.3, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-        <circleGeometry args={[150, 96]} />
-        <meshBasicMaterial map={sheenTex} transparent opacity={0.35} depthWrite={false} />
-      </mesh>
-      {/* Label + spindle. */}
+      <RecordSurface geometry={geometry} onScrub={onScrub} />
+      {/* Label (wobbles with the record — it is printed on it; the spindle
+          lives in Deck, centered, since the record wobbles AROUND it). */}
       <mesh position={[0, 0.2, 0]}>
         <cylinderGeometry args={[50, 50, 1.2, 64]} />
         <meshStandardMaterial color="#a06a1f" roughness={0.7} />
@@ -142,21 +184,33 @@ function Record({
         <circleGeometry args={[49.5, 64]} />
         <meshStandardMaterial map={labelTex} roughness={0.75} />
       </mesh>
-      <mesh castShadow position={[0, 2.5, 0]}>
-        <cylinderGeometry args={[3.4, 3.4, 7, 24]} />
-        <meshStandardMaterial color="#9a9aa2" metalness={0.9} roughness={0.2} />
-      </mesh>
       {children}
     </SpinningRecord>
   );
 }
 
+/** Rotation-only spin group (no wobble) — the platter turns dead-centered. */
+function SpinningPlatter({ children }: { children: React.ReactNode }) {
+  const ref = useRef<THREE.Group>(null);
+  useFrame(() => {
+    if (ref.current) ref.current.rotation.y = discAngle(clipTime());
+  });
+  return <group ref={ref}>{children}</group>;
+}
+
 function Deck() {
   return (
     <group>
+      {/* Plinth: satin charcoal (not pure black) so the deck separates from
+          both the walnut table below and the vinyl above. */}
       <mesh receiveShadow position={[35, -31.4, -10]}>
         <boxGeometry args={[560, 30, 420]} />
-        <meshStandardMaterial color="#17171b" roughness={0.85} metalness={0.1} />
+        <meshStandardMaterial color="#232329" roughness={0.55} metalness={0.35} envMapIntensity={0.6} />
+      </mesh>
+      {/* Brushed top edge strip for a machined feel. */}
+      <mesh position={[35, -16.2, -10]}>
+        <boxGeometry args={[562, 1.2, 422]} />
+        <meshStandardMaterial color="#3a3b42" roughness={0.3} metalness={0.85} envMapIntensity={0.8} />
       </mesh>
       {[
         [-215, -190],
@@ -166,13 +220,30 @@ function Deck() {
       ].map(([x, z]) => (
         <mesh key={`${x},${z}`} position={[x, -50.4, z]}>
           <cylinderGeometry args={[9, 10, 8, 20]} />
-          <meshStandardMaterial color="#0e0e11" roughness={0.6} />
+          <meshStandardMaterial color="#101013" roughness={0.5} metalness={0.3} />
         </mesh>
       ))}
-      <mesh castShadow receiveShadow position={[0, -10.4, 0]}>
-        <cylinderGeometry args={[158, 158, 12, 96]} />
-        <meshStandardMaterial color="#8f9096" metalness={0.85} roughness={0.28} />
-      </mesh>
+      {/* Platter assembly SPINS: dark charcoal metal — deliberately NOT the
+          record's black, so the disc reads as an object sitting on it. The
+          platter turns dead-centered; the record wobbles around it. */}
+      <SpinningPlatter>
+        <mesh castShadow receiveShadow position={[0, -10.4, 0]}>
+          <cylinderGeometry args={[158, 158, 12, 96]} />
+          <meshStandardMaterial color="#33343a" metalness={0.8} roughness={0.32} envMapIntensity={0.9} />
+        </mesh>
+        {/* Polished rim ring. */}
+        <mesh position={[0, -4.6, 0]}>
+          <cylinderGeometry args={[158.2, 158.2, 1.4, 96]} />
+          <meshStandardMaterial color="#8b8d94" metalness={0.95} roughness={0.18} envMapIntensity={1.1} />
+        </mesh>
+        {/* Spindle: centered on the platter axis; the eccentric record
+            wobbles around it, exactly like a mis-punched pressing (the
+            visual twin of the DSP's wow model). */}
+        <mesh castShadow position={[0, 2.5, 0]}>
+          <cylinderGeometry args={[3.4, 3.4, 7, 24]} />
+          <meshStandardMaterial color="#9a9aa2" metalness={0.9} roughness={0.2} />
+        </mesh>
+      </SpinningPlatter>
     </group>
   );
 }
@@ -263,11 +334,13 @@ function CameraRig({
 function StudioLights() {
   return (
     <group>
-      <ambientLight intensity={0.35} />
+      {/* Hemisphere skylight: soft top-down fill with a warm floor bounce —
+          shadows stay open without a flat ambient wash. */}
+      <hemisphereLight args={["#cdd6e4", "#3a2e22", 0.55]} />
       <directionalLight
         castShadow
         position={[250, 320, 160]}
-        intensity={1.5}
+        intensity={1.7}
         color="#ffe8c8"
         shadow-mapSize={[2048, 2048]}
         shadow-camera-left={-420}
@@ -277,8 +350,9 @@ function StudioLights() {
         shadow-camera-far={1200}
         shadow-bias={-0.0004}
       />
-      <directionalLight position={[-260, 180, -220]} intensity={0.55} color="#b8c8ff" />
-      <pointLight position={[0, 60, 0]} intensity={0.35} distance={400} />
+      <directionalLight position={[-260, 180, -220]} intensity={0.6} color="#b8c8ff" />
+      {/* Rim from behind: lifts the record edge off the dark background. */}
+      <directionalLight position={[-40, 190, -420]} intensity={0.7} color="#dfe8f5" />
     </group>
   );
 }
@@ -286,44 +360,33 @@ function StudioLights() {
 function CafeLights() {
   return (
     <group>
-      <ambientLight intensity={0.22} color="#ffe6cc" />
+      {/* Late-afternoon sun through the window (left wall): the warm key. */}
       <directionalLight
         castShadow
-        position={[-190, 420, 250]}
-        intensity={1.35}
-        color="#ffdcb0"
+        position={[-620, 460, 60]}
+        intensity={2.1}
+        color="#ffd9a8"
         shadow-mapSize={[2048, 2048]}
-        shadow-camera-left={-520}
-        shadow-camera-right={520}
-        shadow-camera-top={520}
-        shadow-camera-bottom={-520}
-        shadow-camera-far={1400}
+        shadow-camera-left={-560}
+        shadow-camera-right={560}
+        shadow-camera-top={560}
+        shadow-camera-bottom={-560}
+        shadow-camera-far={2200}
         shadow-bias={-0.0004}
       />
-      <pointLight position={[-180, 150, 90]} intensity={0.7} color="#ffc98a" distance={900} decay={1.6} />
-      <directionalLight position={[-900, 260, -420]} intensity={0.4} color="#9db8e8" />
-      <directionalLight position={[420, 240, -320]} intensity={0.35} color="#cdd8ea" />
+      {/* Skylight fill: cool sky from above, warm wood bounce from below —
+          shadows fill naturally instead of dropping to black. */}
+      <hemisphereLight args={["#b9c8dd", "#4a3826", 0.6]} />
+      {/* Desk-lamp practical over the tonearm area (geometry in
+          CafeEnvironment) — keeps arm, headshell and stylus clearly lit. */}
+      <pointLight position={[330, 120, -60]} intensity={1.1} color="#ffc98a" distance={620} decay={1.7} />
+      {/* Near-pendant glow keeps moving specular life on the spinning vinyl. */}
+      <pointLight position={[-180, 150, 90]} intensity={0.6} color="#ffce96" distance={800} decay={1.7} />
+      {/* Cool rim from behind: separates the record from the room. */}
+      <directionalLight position={[60, 200, -460]} intensity={0.75} color="#d8e2f2" />
     </group>
   );
 }
-
-/** Light directions/colors fed to the groove shader per environment. */
-const LIGHT_RIGS: Record<EnvironmentKind, OverviewLightRig> = {
-  cafe: {
-    keyDir: new THREE.Vector3(-190, 420, 250).normalize(),
-    keyColor: new THREE.Color("#ffdcb0").multiplyScalar(1.35),
-    fillDir: new THREE.Vector3(-900, 260, -420).normalize(),
-    fillColor: new THREE.Color("#9db8e8").multiplyScalar(1.3),
-    ambient: 0.3,
-  },
-  studio: {
-    keyDir: new THREE.Vector3(250, 320, 160).normalize(),
-    keyColor: new THREE.Color("#ffe8c8").multiplyScalar(1.5),
-    fillDir: new THREE.Vector3(-260, 180, -220).normalize(),
-    fillColor: new THREE.Color("#b8c8ff").multiplyScalar(1.8),
-    ambient: 0.35,
-  },
-};
 
 export default function TurntableScene({
   geometry,
@@ -353,23 +416,21 @@ export default function TurntableScene({
   return (
     <Canvas
       shadows
-      camera={{ position: OVERVIEW_POSE.position, fov: 40, near: 0.05, far: 6000 }}
+      camera={{ position: OVERVIEW_POSE.position, fov: 34, near: 0.05, far: 6000 }}
       dpr={[1, 2]}
       gl={{ antialias: true, localClippingEnabled: true, logarithmicDepthBuffer: true }}
     >
-      <color attach="background" args={[cafe ? "#131009" : "#0a0a0d"]} />
-      {cafe && <fog attach="fog" args={["#15120e", 850, 2900]} />}
+      {/* Warm dusk backdrop; fog carries the depth-of-field feel (distant
+          set dressing melts into it) without a postprocessing pass. */}
+      <color attach="background" args={[cafe ? "#1a140d" : "#0c0c10"]} />
+      {cafe && <fog attach="fog" args={["#1c150e", 1000, 3200]} />}
 
+      <EnvironmentReflections intensity={cafe ? 0.55 : 0.4} />
       {cafe ? <CafeLights /> : <StudioLights />}
       {cafe && <CafeEnvironment />}
 
       <Deck />
-      <Record
-        geometry={geometry}
-        filename={filename}
-        lightRig={LIGHT_RIGS[environment]}
-        onScrub={onScrub}
-      >
+      <Record geometry={geometry} filename={filename} onScrub={onScrub}>
         {microActive && (
           <GrooveInspectionMesh
             sessionId={sessionId}

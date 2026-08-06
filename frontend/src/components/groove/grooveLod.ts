@@ -34,10 +34,11 @@ export interface CameraPose {
   target: [number, number, number];
 }
 
-/** Whole-turntable framing (matches the scene's home pose). */
+/** Whole-turntable framing: a close three-quarter product shot — the deck
+ * fills ~75% of the frame at fov 34, record as the focal point. */
 export const OVERVIEW_POSE: CameraPose = {
-  position: [255, 180, 310],
-  target: [40, -25, -25],
+  position: [215, 150, 265],
+  target: [25, -22, -18],
 };
 
 /** Preset camera pose for a mode, aimed at the current stylus contact. */

@@ -1,119 +1,75 @@
 /**
- * Procedural groove material for the record surface (LOD 0-1).
+ * The vinyl playing surface: a STANDARD MeshPhysicalMaterial (no custom GLSL,
+ * no onBeforeCompile) whose groove relief lives in a generated NORMAL +
+ * roughness texture strip.
  *
- * Renders the clip's REAL groove structure — start radius, per-clip turn
- * count, true ~0.25 mm pitch — as an analytically anti-aliased ring pattern
- * computed per-fragment from the record-local radius. Because it is
- * resolution-independent:
+ * Why textures over the previous patched shader: the shader's analytic
+ * anti-aliasing re-evaluated per frame, so ring visibility subtly shifted as
+ * the camera moved — the "unnatural lighting" this replaces. A texture is
+ * filtered by ordinary trilinear mipmapping instead, which is temporally
+ * rock-stable: minification is resolved once in the mip chain, not per frame.
+ * The material itself is bone-stock three.js, so it picks up the environment
+ * map, clearcoat and every scene light with zero custom code to maintain.
  *
- *   - at turntable distance the ~100 turns of a 3-minute clip merge into a
- *     satin "recorded band" (never moiré: when the rings become sub-pixel,
- *     `fwidth` drives a blend to their area-average darkening);
- *   - as the camera closes in, individual adjacent turns resolve at their
- *     honest spacing — no geometry, no texture memory, no LOD pop.
+ * Why a NORMAL map rather than a bump map: three's bumpMap shader measures
+ * the height difference per SCREEN pixel (perturbNormalArb normalizes the
+ * position derivatives away), so bump strength varies with camera distance
+ * and viewport resolution — measured here as an 11x swing between close-up
+ * and mid-distance, i.e. exactly the unstable-lighting artifact this rewrite
+ * is meant to kill. A normal map encodes the surface tilt directly, so the
+ * groove walls have the same slope from every distance, and mip averaging
+ * fades them smoothly into the roughness-carried sheen. The same texture
+ * also drives clearcoatNormalMap, so the gloss layer's highlights follow the
+ * rings — the vinyl shimmer.
  *
- * A 256-bin loudness texture (per-turn RMS of the user's own audio) darkens
- * louder turns — the real-world "you can see the loud track" banding — and
- * feeds a slightly stronger specular response inside the grooves, which is
- * what makes the band catch the pendant light while the disc spins.
+ * The mapping trick that makes one small strip cover the disc: the ring
+ * geometry's UVs are rewritten to POLAR coordinates (u = angle, v = radius),
+ * so a 16 x 4096 strip describes radius alone and wraps seamlessly around
+ * the disc. 4096 rows across the 101 mm surface = ~40 texels/mm — a full 10
+ * texels per 0.25 mm groove pitch, plenty for smooth bump derivatives, and
+ * ~0.5 MB of texture memory.
  *
- * Lighting is a compact Blinn-Phong with a circumferential anisotropic
- * streak (vinyl's signature light bar), fed by two light-direction uniforms
- * supplied per environment. Radius is measured in RECORD-LOCAL space so the
- * pattern rotates with the disc; lighting is computed in world space.
+ * Groove layout (all radii in true mm, per the user's clip metadata):
+ *   151.5..147.5  bare rim margin (records keep a narrow ungrooved edge)
+ *   147.5..57     groove field at true 0.25 mm pitch, covering the whole
+ *                 playable surface; the clip's actual program band inside it
+ *                 gets loudness-modulated depth/roughness (louder turns cut
+ *                 wider, scatter more light), the rest reads as silent turns
+ *   57..53.5      run-out spiral at ~1.6 mm pitch + locked groove
+ *   53.5..50.5    dead wax to the label edge
  */
 
 import * as THREE from "three";
 
 import type { GrooveGeometry } from "../../types/api";
 
-const VERT = /* glsl */ `
-  varying vec3 vLocal;
-  varying vec3 vWorld;
-  varying vec3 vNormalW;
-  void main() {
-    vLocal = position;
-    vec4 w = modelMatrix * vec4(position, 1.0);
-    vWorld = w.xyz;
-    vNormalW = normalize(mat3(modelMatrix) * normal);
-    gl_Position = projectionMatrix * viewMatrix * w;
-  }
-`;
+/** Radial extent of the surface annulus — RecordSurface's geometry and this
+ * texture strip must agree on these. */
+export const SURFACE_R_IN = 50.5;
+export const SURFACE_R_OUT = 151.5;
 
-const FRAG = /* glsl */ `
-  uniform float uRStart;      // groove band outer radius (mm, record-local)
-  uniform float uREnd;        // groove band inner radius (mm)
-  uniform float uPitch;       // true groove pitch (mm)
-  uniform float uTurns;       // total turn count (for loudness lookup)
-  uniform sampler2D uLoudness;
-  uniform vec3 uBase;
-  uniform vec3 uKeyDir;
-  uniform vec3 uKeyColor;
-  uniform vec3 uFillDir;
-  uniform vec3 uFillColor;
-  uniform float uAmbient;
-  varying vec3 vLocal;
-  varying vec3 vWorld;
-  varying vec3 vNormalW;
+const STRIP_H = 4096;
 
-  void main() {
-    float r = length(vLocal.xz);
+// The roughness map is genuinely 2D (u = angle, v = radius): angular finish
+// variation is what makes the rotation VISIBLE — see pass 3 in buildStrips.
+// 512 x 2048 RGBA = 4 MB, generated once per clip.
+const ROUGH_W = 512;
+const ROUGH_H = 2048;
 
-    // Recorded band mask with soft edges (plus a faint lead-in/out fade).
-    float inBand = smoothstep(uREnd - 0.4, uREnd + 0.1, r)
-                 * (1.0 - smoothstep(uRStart - 0.1, uRStart + 0.4, r));
+// The normal map is 2D as well: its red channel carries the groove walls'
+// tangential micro-waviness (the music's own wiggle), which is what makes
+// glints slide around the disc as it spins. 512 x 4096 RGBA = 8 MB.
+const NORMAL_W = 512;
 
-    // Ring pattern at true pitch, analytically anti-aliased.
-    float phase = (uRStart - r) / uPitch;      // 0..uTurns across the band
-    float aa = fwidth(phase);
-    float f = fract(phase);
-    float d = min(f, 1.0 - f) * 2.0;           // 0 at groove center
-    float duty = 0.5;                          // groove+shoulder shading width
-    float line = 1.0 - smoothstep(duty - 2.0 * aa, duty + 2.0 * aa, d);
-    // Sub-pixel rings: cross-fade to their area average (kills moiré).
-    float resolve = 1.0 - smoothstep(0.35, 0.9, aa);
-    float groove = mix(duty * 0.5, line, resolve);
+const RIM_MARGIN_R = 147.5;   // grooves start just inside the edge
+const RUNOUT_HI = 57;         // music field ends, run-out spiral begins
+const RUNOUT_LO = 53.5;       // dead wax from here to the label
+const MUSIC_PITCH = 0.25;     // mm
+const RUNOUT_PITCH = 1.6;     // mm
+const VALLEY_HW = 0.075;      // mm — display half-width (>= 3 texels for smooth slopes)
 
-    float loud = texture2D(uLoudness, vec2(clamp(phase / max(uTurns, 1.0), 0.0, 1.0), 0.5)).r;
-    float dark = inBand * groove * mix(0.4, 0.95, loud);
-
-    vec3 N = normalize(vNormalW);
-    vec3 V = normalize(cameraPosition - vWorld);
-    vec3 base = uBase * (1.0 - 0.55 * dark);
-
-    vec3 col = base * uAmbient;
-    // Key light: diffuse + sharp specular + circumferential anisotropic streak.
-    {
-      vec3 Ld = normalize(uKeyDir);
-      vec3 H = normalize(Ld + V);
-      float diff = max(dot(N, Ld), 0.0);
-      float spec = pow(max(dot(N, H), 0.0), 90.0);
-      vec3 T = normalize(vec3(-vLocal.z, 0.0, vLocal.x)); // groove tangent
-      float streak = pow(max(1.0 - abs(dot(H, T)), 0.0), 10.0) * max(dot(N, Ld), 0.0);
-      col += uKeyColor * (diff * 0.8 * base + (0.15 + 0.55 * dark) * spec + 0.10 * streak * inBand);
-    }
-    // Fill light: diffuse only.
-    {
-      vec3 Ld = normalize(uFillDir);
-      col += uFillColor * max(dot(N, Ld), 0.0) * 0.3 * base;
-    }
-
-    gl_FragColor = vec4(col, 1.0);
-    #include <tonemapping_fragment>
-    #include <colorspace_fragment>
-  }
-`;
-
-export interface OverviewLightRig {
-  keyDir: THREE.Vector3;
-  keyColor: THREE.Color;
-  fillDir: THREE.Vector3;
-  fillColor: THREE.Color;
-  ambient: number;
-}
-
-/** Per-turn RMS of the uploaded audio -> 256-bin loudness texture. */
-export function buildLoudnessTexture(geometry: GrooveGeometry): THREE.DataTexture {
+/** Per-turn RMS of the uploaded audio, 256 bins across the program band. */
+function loudnessBins(geometry: GrooveGeometry): Float32Array {
   const bins = 256;
   const sum = new Float32Array(bins);
   const count = new Float32Array(bins);
@@ -131,41 +87,319 @@ export function buildLoudnessTexture(geometry: GrooveGeometry): THREE.DataTextur
     rms[b] = count[b] > 0 ? Math.sqrt(sum[b] / count[b]) : 0;
     peak = Math.max(peak, rms[b]);
   }
-  const data = new Uint8Array(bins * 4);
-  for (let b = 0; b < bins; b++) {
-    const v = Math.round(255 * Math.sqrt(rms[b] / peak)); // sqrt: perceptual-ish
-    data[b * 4] = data[b * 4 + 1] = data[b * 4 + 2] = v;
-    data[b * 4 + 3] = 255;
-  }
-  const tex = new THREE.DataTexture(data, bins, 1);
-  tex.needsUpdate = true;
-  return tex;
+  for (let b = 0; b < bins; b++) rms[b] = Math.sqrt(rms[b] / peak); // perceptual-ish
+  return rms;
 }
 
-export function makeGrooveOverviewMaterial(
-  geometry: GrooveGeometry,
-  loudness: THREE.DataTexture,
-  rig: OverviewLightRig,
-): THREE.ShaderMaterial {
+function hash(n: number): number {
+  const s = Math.sin(n * 127.1 + 311.7) * 43758.5453;
+  return s - Math.floor(s);
+}
+
+/** Distance (mm) to the nearest groove centre for rings at `pitch` anchored
+ * at `rRef`, plus which turn index that centre is. */
+function nearestGroove(r: number, rRef: number, pitch: number): { dist: number; turn: number } {
+  const phase = (rRef - r) / pitch;
+  const turn = Math.round(phase);
+  return { dist: Math.abs(phase - turn) * pitch, turn };
+}
+
+interface StripResult {
+  normal: THREE.CanvasTexture;
+  rough: THREE.CanvasTexture;
+}
+
+function buildStrips(geometry: GrooveGeometry): StripResult {
   const meta = geometry.meta;
+  const progStart = Math.min(meta.start_radius_mm, RIM_MARGIN_R);
   const pitchMm = meta.groove_pitch_um / 1000;
-  const rStart = meta.start_radius_mm;
-  const rEnd = rStart - meta.revolutions * pitchMm;
-  return new THREE.ShaderMaterial({
-    vertexShader: VERT,
-    fragmentShader: FRAG,
-    uniforms: {
-      uRStart: { value: rStart },
-      uREnd: { value: rEnd },
-      uPitch: { value: pitchMm },
-      uTurns: { value: meta.revolutions },
-      uLoudness: { value: loudness },
-      uBase: { value: new THREE.Color("#141416") },
-      uKeyDir: { value: rig.keyDir },
-      uKeyColor: { value: rig.keyColor },
-      uFillDir: { value: rig.fillDir },
-      uFillColor: { value: rig.fillColor },
-      uAmbient: { value: rig.ambient },
-    },
+  const progEnd = progStart - meta.revolutions * pitchMm;
+  const loud = loudnessBins(geometry);
+  const turnsTotal = Math.max(meta.revolutions, 1e-3);
+  const drMm = (SURFACE_R_OUT - SURFACE_R_IN) / STRIP_H; // radial mm per row
+
+  // Pass 1: physical height per row, in millimeters (0 = land level).
+  // Micro-scale on purpose: a ~28-50 um valley over a 75 um half-width gives
+  // groove-wall slopes of ~20-30 degrees — fine rings that catch light, never
+  // engraved channels.
+  const heightMm = new Float32Array(STRIP_H);
+  const roughArr = new Float32Array(STRIP_H);
+  for (let j = 0; j < STRIP_H; j++) {
+    const r = SURFACE_R_IN + ((j + 0.5) / STRIP_H) * (SURFACE_R_OUT - SURFACE_R_IN);
+
+    let valleyMm = 0;
+    let extraRough = 0;
+
+    if (r <= RIM_MARGIN_R && r > RUNOUT_HI) {
+      // Music-pitch groove field across the whole playable surface.
+      const { dist, turn } = nearestGroove(r, RIM_MARGIN_R, MUSIC_PITCH);
+      // Silent turns are shallow-but-visible; the clip's program band
+      // modulates with its own per-turn loudness (louder = cut wider/deeper).
+      let depth = 0.028;
+      if (r <= progStart && r >= progEnd) {
+        const progTurn = (progStart - r) / pitchMm;
+        const li = Math.min(255, Math.max(0, Math.floor((progTurn / turnsTotal) * 256)));
+        depth = 0.024 + 0.024 * loud[li];
+        extraRough = 0.1 * loud[li];
+      }
+      // Pressing variation: slow drift + per-turn jitter, never uniform.
+      depth *= 0.9 + 0.2 * hash(Math.floor(r * 0.35)) + 0.06 * (hash(turn) - 0.5);
+      valleyMm = depth * Math.exp(-(dist * dist) / (VALLEY_HW * VALLEY_HW));
+    } else if (r <= RUNOUT_HI && r > RUNOUT_LO) {
+      // Run-out spiral: same groove, far wider land between turns.
+      const { dist } = nearestGroove(r, RUNOUT_HI, RUNOUT_PITCH);
+      valleyMm = 0.032 * Math.exp(-(dist * dist) / (VALLEY_HW * VALLEY_HW));
+    } else if (r <= RUNOUT_LO && r > RUNOUT_LO - 0.6) {
+      // Locked groove hugging the dead wax.
+      const { dist } = nearestGroove(r, RUNOUT_LO, 0.3);
+      valleyMm = 0.028 * Math.exp(-(dist * dist) / (VALLEY_HW * VALLEY_HW));
+    }
+
+    // A whisper of radial manufacturing texture keeps the land from reading
+    // as mathematically flat.
+    heightMm[j] = 0.0015 * hash(j * 1.7) - valleyMm;
+    // Roughness baseline: polished land, scuffed groove walls, loud turns
+    // slightly coarser. Absolute values (material.roughness = 1, map
+    // multiplies); the angular detail is layered on top in pass 3.
+    roughArr[j] = Math.max(
+      0.04,
+      Math.min(1, 0.3 + (valleyMm / 0.05) * 0.28 + extraRough + 0.02 * hash(j * 3.1 + 7)),
+    );
+  }
+
+  // Pass 2: encode slope as a tangent-space normal map. With polar UVs the
+  // texture's +v axis is the outward radial, so the radial groove-wall slope
+  // dH/dr lands in the GREEN channel: n = normalize((jx, -dH/dv, 1)) in
+  // (T, B, N).
+  //
+  // The RED channel carries TANGENTIAL micro-waviness inside the groove
+  // valleys, keyed to the clip's per-turn loudness. This is the honest
+  // source of vinyl's rotating sparkle: a cut groove wall is not a smooth
+  // ring — it carries the music's wiggle — so each patch of wall throws its
+  // glint in a slightly different direction, and the glints visibly slide
+  // as the disc turns. Without it, perfect rings are rotationally symmetric
+  // and the spinning record looks frozen.
+  const normalC = document.createElement("canvas");
+  normalC.width = NORMAL_W;
+  normalC.height = STRIP_H;
+  const ng = normalC.getContext("2d")!;
+  const normalImg = ng.createImageData(NORMAL_W, STRIP_H);
+
+  // Hairline scratches, shared by the normal and roughness passes. Defined
+  // in normalized (u, v) so both texture resolutions can rasterize them.
+  // Mostly radial (narrow in angle, long in radius): as the disc turns, each
+  // one sweeps through the key light and FLASHES once per revolution — on a
+  // real record this is the single strongest "it's spinning" cue. Their
+  // normal tilt is single-signed (a drag scratch has one dominant wall), so
+  // the flash survives mip averaging instead of cancelling.
+  interface Scuff { u0: number; uHw: number; v0: number; v1: number; s: number }
+  const scuffs: Scuff[] = [];
+  for (let k = 0; k < 12; k++) {
+    const v0 = hash(k * 3.7 + 1) * 0.85;
+    scuffs.push({
+      u0: hash(k * 1.3),
+      uHw: (0.6 + hash(k * 2.1) * 1.2) / ROUGH_W,
+      v0,
+      v1: Math.min(1, v0 + 0.1 + hash(k * 5.3) * 0.3),
+      s: 0.55 + hash(k * 7.9) * 0.45, // wall tilt at the scratch (steep!)
+    });
+  }
+  const scratchTiltAt = (u: number, v: number): number => {
+    let jx = 0;
+    for (const sc of scuffs) {
+      if (v >= sc.v0 && v <= sc.v1) {
+        let du = Math.abs(u - sc.u0);
+        du = Math.min(du, 1 - du); // wrap around the disc
+        if (du < sc.uHw) jx += sc.s * (1 - du / sc.uHw);
+      }
+    }
+    return jx;
+  };
+
+  // Low-frequency "polish domain" waviness: mm-scale patches of coherent
+  // tangential tilt (the faint orange-peel swim a real pressing shows under
+  // a lamp). Deliberately LOW frequency so it survives mip minification at
+  // turntable distance — the per-texel jitter below carries the close-range
+  // sparkle but averages away in the mips; this layer is what keeps the
+  // rotation readable from across the room.
+  const DOM_U = 32;
+  const DOM_V = 64;
+  const domain = new Float32Array(DOM_U * DOM_V);
+  for (let i = 0; i < domain.length; i++) domain[i] = hash(i * 17.31 + 3) - 0.5;
+  const domainAt = (u: number, v: number): number => {
+    const x = u * DOM_U, y = v * DOM_V;
+    const x0 = Math.floor(x) % DOM_U, y0 = Math.min(DOM_V - 1, Math.floor(y));
+    const x1 = (x0 + 1) % DOM_U, y1 = Math.min(DOM_V - 1, y0 + 1);
+    const fx = x - Math.floor(x), fy = y - Math.floor(y);
+    const a = domain[y0 * DOM_U + x0] * (1 - fx) + domain[y0 * DOM_U + x1] * fx;
+    const b = domain[y1 * DOM_U + x0] * (1 - fx) + domain[y1 * DOM_U + x1] * fx;
+    return a * (1 - fy) + b * fy;
+  };
+
+  for (let j = 0; j < STRIP_H; j++) {
+    const jm = Math.max(j - 1, 0);
+    const jp = Math.min(j + 1, STRIP_H - 1);
+    const slope = (heightMm[jp] - heightMm[jm]) / ((jp - jm) * drMm); // dH/dr
+    const valleyNorm = Math.min(1, -Math.min(heightMm[j], 0) / 0.03);
+
+    const r = SURFACE_R_IN + ((j + 0.5) / STRIP_H) * (SURFACE_R_OUT - SURFACE_R_IN);
+    const turn = Math.round((RIM_MARGIN_R - r) / MUSIC_PITCH);
+    let loudHere = 0.25; // silent/blank turns still have lead-in-level texture
+    if (r <= progStart && r >= progEnd) {
+      const progTurn = (progStart - r) / pitchMm;
+      const li = Math.min(255, Math.max(0, Math.floor((progTurn / turnsTotal) * 256)));
+      loudHere = 0.3 + 0.7 * loud[li];
+    }
+    // Peak tangential slope ~0.16 (~9 deg) on loud walls — micro-waviness,
+    // far shallower than the ~30 deg radial walls it decorates.
+    const jAmp = valleyNorm * 0.16 * loudHere;
+
+    // Domains only exist where there is groove texture to deform (the bare
+    // rim margin and dead wax stay optically flat).
+    const grooved = r <= RIM_MARGIN_R && r > RUNOUT_LO - 0.6 ? 1 : 0;
+    const vFrac = j / STRIP_H;
+
+    const rowOff = j * NORMAL_W * 4;
+    for (let x = 0; x < NORMAL_W; x++) {
+      const uFrac = x / NORMAL_W;
+      const jx =
+        jAmp * 2 * (hash(x * 7919 + turn * 104729) - 0.5) +
+        grooved * (0.22 * domainAt(uFrac, vFrac) + scratchTiltAt(uFrac, vFrac));
+      const inv = 1 / Math.hypot(jx, slope, 1);
+      const o = rowOff + x * 4;
+      normalImg.data[o] = Math.round((jx * inv * 0.5 + 0.5) * 255);
+      normalImg.data[o + 1] = Math.round((-slope * inv * 0.5 + 0.5) * 255);
+      normalImg.data[o + 2] = Math.round((inv * 0.5 + 0.5) * 255);
+      normalImg.data[o + 3] = 255;
+    }
+  }
+  ng.putImageData(normalImg, 0, 0);
+
+  // Pass 3: the 2D roughness map — where the SPIN becomes visible.
+  //
+  // Perfect concentric rings are rotationally symmetric: a spinning disc of
+  // them renders identically every frame, so the record looks frozen even
+  // though it turns. Real records read as spinning because their FINISH
+  // varies with angle. Four honest layers provide that, all in roughness
+  // (they modulate how each patch scatters the highlights, so glints slide
+  // around the disc as it rotates):
+  //   1. groove sparkle — per-(turn, angle) glint noise, stronger on the
+  //      clip's loud turns (wider cut = more light scatter);
+  //   2. pressing haze — low-frequency blotches from uneven stamper polish;
+  //   3. a few hairline scuffs crossing the grooves radially (these sweep
+  //      through the highlight once per revolution — the strongest cue);
+  //   4. sparse dust specks.
+  const roughC = document.createElement("canvas");
+  roughC.width = ROUGH_W;
+  roughC.height = ROUGH_H;
+  const rg = roughC.getContext("2d")!;
+  const roughImg = rg.createImageData(ROUGH_W, ROUGH_H);
+
+  // Precompute per-row (radius) values at roughness resolution.
+  const rowBase = new Float32Array(ROUGH_H);
+  const rowValley = new Float32Array(ROUGH_H);
+  const rowLoud = new Float32Array(ROUGH_H);
+  const rowTurn = new Int32Array(ROUGH_H);
+  for (let j = 0; j < ROUGH_H; j++) {
+    const src = Math.min(STRIP_H - 1, Math.floor((j / ROUGH_H) * STRIP_H));
+    rowBase[j] = roughArr[src];
+    rowValley[j] = Math.min(1, -Math.min(heightMm[src], 0) / 0.04);
+    const r = SURFACE_R_IN + ((j + 0.5) / ROUGH_H) * (SURFACE_R_OUT - SURFACE_R_IN);
+    rowTurn[j] = Math.round((RIM_MARGIN_R - r) / MUSIC_PITCH);
+    if (r <= progStart && r >= progEnd) {
+      const progTurn = (progStart - r) / pitchMm;
+      const li = Math.min(255, Math.max(0, Math.floor((progTurn / turnsTotal) * 256)));
+      rowLoud[j] = loud[li];
+    }
+  }
+
+  // Pressing-haze grid, bilinearly sampled.
+  const HAZE = 16;
+  const haze = new Float32Array(HAZE * HAZE);
+  for (let i = 0; i < haze.length; i++) haze[i] = hash(i * 13.7 + 5) - 0.5;
+  const hazeAt = (u: number, v: number): number => {
+    const x = u * HAZE, y = v * HAZE;
+    const x0 = Math.floor(x) % HAZE, y0 = Math.min(HAZE - 1, Math.floor(y));
+    const x1 = (x0 + 1) % HAZE, y1 = Math.min(HAZE - 1, y0 + 1);
+    const fx = x - Math.floor(x), fy = y - Math.floor(y);
+    const a = haze[y0 * HAZE + x0] * (1 - fx) + haze[y0 * HAZE + x1] * fx;
+    const b = haze[y1 * HAZE + x0] * (1 - fx) + haze[y1 * HAZE + x1] * fx;
+    return a * (1 - fy) + b * fy;
+  };
+
+  for (let j = 0; j < ROUGH_H; j++) {
+    const rowOff = j * ROUGH_W * 4;
+    for (let i = 0; i < ROUGH_W; i++) {
+      let rough = rowBase[j];
+      // 1. groove sparkle (only where there is groove to sparkle)
+      rough +=
+        rowValley[j] *
+        (hash(i * 7919 + rowTurn[j] * 104729) - 0.5) *
+        0.26 *
+        (0.45 + 0.55 * rowLoud[j]);
+      // 2. pressing haze
+      rough += 0.07 * hazeAt(i / ROUGH_W, j / ROUGH_H);
+      // 3. scuffs (shared geometry with the normal map's scratch tilt, so
+      //    the flash and the matte line coincide)
+      rough += 0.22 * Math.min(1, scratchTiltAt(i / ROUGH_W, j / ROUGH_H));
+      // 4. dust
+      if (hash(i * 31.7 + j * 517.3) > 0.9994) rough += 0.3;
+
+      const rb = Math.round(Math.max(0.04, Math.min(1, rough)) * 255);
+      const o = rowOff + i * 4;
+      roughImg.data[o] = roughImg.data[o + 1] = roughImg.data[o + 2] = rb;
+      roughImg.data[o + 3] = 255;
+    }
+  }
+  rg.putImageData(roughImg, 0, 0);
+
+  const mk = (canvas: HTMLCanvasElement) => {
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.wrapS = THREE.RepeatWrapping; // seamless around the disc (u = angle)
+    tex.wrapT = THREE.ClampToEdgeWrapping;
+    tex.anisotropy = 8;
+    tex.colorSpace = THREE.NoColorSpace; // data maps, not colors
+    return tex;
+  };
+  return { normal: mk(normalC), rough: mk(roughC) };
+}
+
+export interface VinylSurface {
+  material: THREE.MeshPhysicalMaterial;
+  dispose: () => void;
+}
+
+/** Build the record-surface material for one clip's geometry. */
+export function makeVinylSurfaceMaterial(geometry: GrooveGeometry): VinylSurface {
+  const { normal, rough } = buildStrips(geometry);
+
+  const material = new THREE.MeshPhysicalMaterial({
+    // Polished black PVC: a dielectric, never a metal. Form comes from the
+    // clearcoat's environment reflection, not from lifting the albedo.
+    color: new THREE.Color("#0a0a0c"),
+    metalness: 0.0,
+    roughness: 1.0, // absolute values live in the roughness map
+    roughnessMap: rough,
+    // The groove relief, view-stable (see module docstring). The base layer
+    // keeps the rings visible under ordinary diffuse/spec light…
+    normalMap: normal,
+    normalScale: new THREE.Vector2(1, 1),
+    // …and the clearcoat following the same relief is what produces the
+    // pronounced circular shimmer when a light source rakes the surface.
+    clearcoat: 1.0,
+    clearcoatRoughness: 0.06,
+    clearcoatNormalMap: normal,
+    clearcoatNormalScale: new THREE.Vector2(1, 1),
+    envMapIntensity: 1.45,
+    side: THREE.FrontSide,
   });
+
+  return {
+    material,
+    dispose: () => {
+      material.dispose();
+      normal.dispose();
+      rough.dispose();
+    },
+  };
 }

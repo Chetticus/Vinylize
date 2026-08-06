@@ -291,14 +291,19 @@ export function MicroStylus({
 
   return (
     <group ref={ref}>
-      {/* Diamond tip. */}
+      {/* Diamond tip, at the group origin (the solved contact point). */}
       <mesh>
         <sphereGeometry args={[tipR, 16, 16]} />
         <meshStandardMaterial color="#e8e2d4" roughness={0.15} metalness={0.4} />
       </mesh>
-      {/* Cantilever stub rising toward the (hidden) macro cartridge. */}
-      <mesh position={[0.35, 1.1, 0]} rotation={[0, 0, -0.32]}>
-        <cylinderGeometry args={[0.02, 0.09, 2.4, 8]} />
+      {/* Cantilever stub rising toward the (hidden) macro cartridge. Its
+          lower end lands inside the tip sphere so the two are joined, and it
+          tapers THICK->thin upward->downward (radiusTop 0.09 at the cartridge
+          end, 0.02 at the diamond): a real cantilever is far heavier than the
+          chip glued to its end. The taper was previously inverted, which left
+          the stub flaring out around a needle it never met. */}
+      <mesh position={[0.3, 0.95, 0]} rotation={[0, 0, -0.3]}>
+        <cylinderGeometry args={[0.09, 0.02, 2.0, 8]} />
         <meshStandardMaterial color="#c9cad0" metalness={0.85} roughness={0.25} />
       </mesh>
     </group>
