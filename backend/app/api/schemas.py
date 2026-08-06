@@ -42,24 +42,27 @@ class ProcessRequest(BaseModel):
     crosstalk: bool = True
     noise: bool = True
 
-    # Defaults describe a mid-disc cut on a well-worn record rather than a
-    # pristine pressing at the outer edge: at 1.0x-everything the differences
+    # Defaults describe a well-worn record: at 1.0x-everything the differences
     # are real but easy to miss on laptop speakers. 1.0 on every scale is
     # still "measured reality" — the frontend labels this honestly.
-    # (Long clips may be clamped outward so they fit the program area; the
-    # response reports the effective radius.)
+    # Placement defaults to the outer edge so the stylus drops onto the rim's
+    # lead-in and travels inward, like side A track 1; the slider still moves
+    # the clip inward for the inner-groove experiment. (Long clips may be
+    # clamped outward so they fit; the response reports the effective radius.)
     start_radius_mm: float = Field(
-        default=100.0,
+        default=OUTER_RADIUS_M * 1000.0,
         ge=INNER_RADIUS_M * 1000.0 + 2.0,
         le=OUTER_RADIUS_M * 1000.0,
         description="Where on the disc the clip is placed — the inner-groove experiment.",
     )
-    stylus_size: float = Field(default=1.5, ge=0.25, le=4.0)
-    saturation_drive: float = Field(default=2.0, ge=0.0, le=8.0)
-    wow_depth: float = Field(default=2.5, ge=0.0, le=10.0)
-    click_density: float = Field(default=3.0, ge=0.0, le=10.0)
-    crosstalk_amount: float = Field(default=1.5, ge=0.0, le=10.0)
-    noise_level: float = Field(default=3.0, ge=0.0, le=10.0)
+    # Educational "worn favorite" preset: stronger than a clean pressing so
+    # the character remains obvious on laptop speakers. Use 1.0 for realism.
+    stylus_size: float = Field(default=2.75, ge=0.25, le=4.0)
+    saturation_drive: float = Field(default=4.0, ge=0.0, le=8.0)
+    wow_depth: float = Field(default=3.0, ge=0.0, le=10.0)
+    click_density: float = Field(default=4.0, ge=0.0, le=10.0)
+    crosstalk_amount: float = Field(default=2.0, ge=0.0, le=10.0)
+    noise_level: float = Field(default=4.0, ge=0.0, le=10.0)
     seed: int = 1109
 
 

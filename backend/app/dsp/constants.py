@@ -139,6 +139,14 @@ separation degrades by ~6 dB/octave."""
 CROSSTALK_HF_EXTRA_DB: float = 10.0
 """Additional leakage reached well above the corner."""
 
+LEAD_IN_SECONDS: float = 6.0
+"""Silent lead-in prepended to every clip before cutting. This is not a fade
+or an audio effect: the pipeline genuinely cuts ~3 turns of unmodulated
+groove, so the stylus rides real silent vinyl — hiss, rumble, clicks and all
+— before the first musical groove arrives, exactly as on a pressed record.
+The original (A/B reference) is padded with the same silence so the two
+renditions stay sample-locked."""
+
 # ---------------------------------------------------------------------------
 # Processing limits
 # ---------------------------------------------------------------------------

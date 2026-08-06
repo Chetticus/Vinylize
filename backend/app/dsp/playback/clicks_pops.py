@@ -39,7 +39,7 @@ from app.dsp.filters import resonant_impulse
 # Log-normal amplitude distribution for defect severity, relative to full
 # Intentionally worn-record default: many audible ticks and occasional pops.
 _AMP_MEDIAN = 0.025
-_AMP_SIGMA = 1.35
+_AMP_SIGMA = 1.25
 
 
 @dataclass(frozen=True)
@@ -57,7 +57,7 @@ def process(
     spiral: SpiralMap,
     sample_rate: int,
     rng: np.random.Generator,
-    density_scale: float = 2.0,
+    density_scale: float = 1.0,
 ) -> ClicksResult:
     """Generate additive click signals for the left/right velocity channels."""
     from app.dsp.constants import INNER_RADIUS_M, OMEGA  # local: avoid cycle noise

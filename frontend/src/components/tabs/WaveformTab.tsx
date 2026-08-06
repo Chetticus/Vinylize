@@ -2,20 +2,25 @@ import { engine, useStore } from "../../state/store";
 import Waveform from "../Waveform";
 
 export default function WaveformTab() {
-  const { analysis, positionS, seek } = useStore();
+  const { analysis, originalPeaks, positionS, seek } = useStore();
   if (!analysis) return null;
+
+  // Prefer the padded peaks (they include the 6 s lead-in groove, so the
+  // playhead lines up with the transport); analysis peaks are the fallback
+  // while processing is still in flight.
+  const peaks = originalPeaks ?? analysis.waveform;
 
   return (
     <div>
       <div className="panel">
         <h3>Original waveform</h3>
         <p className="sub">
-          The clip exactly as uploaded — this is the reference every simulated change is measured
-          against. Click the waveform to seek.
+          The clip exactly as uploaded (after the shared 6-second lead-in) — the reference every
+          simulated change is measured against. Click the waveform to seek.
         </p>
         <Waveform
-          mins={analysis.waveform.mins}
-          maxs={analysis.waveform.maxs}
+          mins={peaks.mins}
+          maxs={peaks.maxs}
           playhead={engine.duration ? positionS / engine.duration : undefined}
           onSeek={(f) => seek(f * engine.duration)}
         />

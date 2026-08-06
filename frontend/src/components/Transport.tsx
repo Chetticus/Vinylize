@@ -33,7 +33,7 @@ export default function Transport() {
       <button className="btn primary" onClick={togglePlay} disabled={!ready} style={{ minWidth: 84 }}>
         {playing ? "❚❚ Pause" : "▶ Play"}
       </button>
-      <div className="ab-switch" title="Switch instantly — playback stays sample-synced">
+      <div className="ab-switch" title="Smooth 65 ms crossfade — playback stays sample-synced">
         <button className={mode === "original" ? "active" : ""} onClick={() => setMode("original")} disabled={!ready}>
           Original
         </button>
@@ -53,7 +53,7 @@ export default function Transport() {
       <div className="time">
         {fmt(positionS)} / {fmt(duration)}
       </div>
-      <div className="volume" title={`Volume ×${volume.toFixed(2)} — boosted output runs through a limiter, so crank it`}>
+      <div className="volume" title={`Volume ×${volume.toFixed(2)} — 1.00× is clean; boosted output uses a safety limiter`}>
         <span aria-hidden>{volume === 0 ? "🔇" : volume < 1.3 ? "🔉" : "🔊"}</span>
         <input
           type="range"

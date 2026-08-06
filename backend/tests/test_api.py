@@ -45,6 +45,38 @@ def test_analyze_then_process_then_buffers() -> None:
     assert len(geo) == p["geometry"]["n_points"] * 5 * 4
 
 
+def test_lead_in_prepended_and_synced() -> None:
+    """Both renditions carry the 6 s silent lead-in: equal length, original
+    silent at the start, vinyl carrying only surface noise there."""
+    import numpy as np
+
+    from app.dsp.constants import LEAD_IN_SECONDS
+
+    r = client.post("/api/analyze", files={"file": ("tone.wav", _wav_bytes(2.0), "audio/wav")})
+    body = r.json()
+    p = client.post("/api/process", json={"session_id": body["session_id"]}).json()
+
+    def decode(url: str) -> tuple[np.ndarray, int]:
+        data, sr = sf.read(io.BytesIO(client.get(url).content), always_2d=True)
+        return data, sr
+
+    orig, sr = decode(p["original_url"])
+    vinyl, _ = decode(p["vinyl_url"])
+    n_lead = int(LEAD_IN_SECONDS * sr)
+
+    assert orig.shape[0] == vinyl.shape[0]  # sample-locked A/B
+    assert orig.shape[0] >= n_lead + int(1.9 * sr)  # clip + lead-in
+    # Original lead-in is dead silence (16-bit: exactly zero)…
+    assert float(np.abs(orig[: n_lead - 100]).max()) == 0.0
+    # …while the vinyl lead-in carries audible surface noise/clicks, but no
+    # music-level signal.
+    lead_rms = float(np.sqrt(np.mean(vinyl[sr : n_lead - sr] ** 2)))
+    assert 1e-5 < lead_rms < 0.1
+    # The music region is much louder than the lead-in on the vinyl side.
+    music_rms = float(np.sqrt(np.mean(vinyl[n_lead + sr // 2 : n_lead + sr] ** 2)))
+    assert music_rms > lead_rms * 3
+
+
 def test_rejects_garbage_upload() -> None:
     r = client.post("/api/analyze", files={"file": ("x.wav", b"not audio at all", "audio/wav")})
     assert r.status_code == 400

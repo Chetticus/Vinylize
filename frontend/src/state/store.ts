@@ -37,9 +37,14 @@ interface SessionState {
   processResult: ProcessResponse | null;
   geometry: GrooveGeometry | null;
   vinylPeaks: { mins: number[]; maxs: number[] } | null;
+  /** Peaks of the padded original (incl. the 6 s lead-in) so waveform
+   * playheads align with the transport clock. */
+  originalPeaks: { mins: number[]; maxs: number[] } | null;
 
   config: ProcessConfig;
   activeTab: TabKey;
+  /** Card key the Explorer should open + scroll to (set by sidebar links). */
+  explorerFocus: string | null;
   loading: string | null; // human-readable phase, or null when idle
   /** Render progress 0..1 while the backend is simulating, else null. */
   progressFrac: number | null;
@@ -56,6 +61,9 @@ interface SessionState {
   setConfig: (patch: Partial<ProcessConfig>) => void;
   reprocess: () => Promise<void>;
   setTab: (tab: TabKey) => void;
+  /** Jump to the Explorer with a specific stage card selected. */
+  openExplorerCard: (key: string) => void;
+  clearExplorerFocus: () => void;
 
   togglePlay: () => void;
   setMode: (mode: PlaybackMode) => void;
@@ -145,6 +153,7 @@ export const useStore = create<SessionState>((set, get) => {
         processResult: result,
         geometry,
         vinylPeaks: computePeaks(vinylBuf),
+        originalPeaks: computePeaks(originalBuf),
         loading: null,
         progressFrac: null,
         playing: wasPlaying,
@@ -173,6 +182,7 @@ export const useStore = create<SessionState>((set, get) => {
       processResult: null,
       geometry: null,
       vinylPeaks: null,
+      originalPeaks: null,
       playing: false,
       positionS: 0,
       loading: null,
@@ -196,15 +206,18 @@ export const useStore = create<SessionState>((set, get) => {
     processResult: null,
     geometry: null,
     vinylPeaks: null,
+    originalPeaks: null,
     config: { ...DEFAULT_CONFIG },
     activeTab: "waveform",
+    explorerFocus: null,
     loading: null,
     progressFrac: null,
     error: null,
     playing: false,
     mode: "vinyl",
     positionS: 0,
-    volume: 2,
+    // Unity is a clean A/B reference. Boost remains available up to 4x.
+    volume: 1,
 
     upload: (file) => ingest(() => analyzeFile(file)),
     useDemo: () => ingest(loadDemo),
@@ -222,6 +235,8 @@ export const useStore = create<SessionState>((set, get) => {
     setConfig: (patch) => set((s) => ({ config: { ...s.config, ...patch } })),
     reprocess: () => runProcess(),
     setTab: (tab) => set({ activeTab: tab }),
+    openExplorerCard: (key) => set({ activeTab: "explorer", explorerFocus: key }),
+    clearExplorerFocus: () => set({ explorerFocus: null }),
 
     togglePlay: () => {
       if (!engine.isReady) return;

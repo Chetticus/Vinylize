@@ -2,10 +2,11 @@ import { engine, useStore } from "../../state/store";
 import Waveform from "../Waveform";
 
 export default function CompareTab() {
-  const { analysis, vinylPeaks, positionS, seek, mode, setMode } = useStore();
+  const { analysis, vinylPeaks, originalPeaks, positionS, seek, mode, setMode } = useStore();
   if (!analysis || !vinylPeaks) return null;
 
   const playheadF = engine.duration ? positionS / engine.duration : undefined;
+  const origPeaks = originalPeaks ?? analysis.waveform;
 
   return (
     <div className="compare-grid">
@@ -15,10 +16,10 @@ export default function CompareTab() {
         onClick={() => setMode("original")}
       >
         <h3>Original {mode === "original" && "· listening"}</h3>
-        <p className="sub">The untouched upload.</p>
+        <p className="sub">The untouched upload (silent through the shared lead-in).</p>
         <Waveform
-          mins={analysis.waveform.mins}
-          maxs={analysis.waveform.maxs}
+          mins={origPeaks.mins}
+          maxs={origPeaks.maxs}
           color="#9b988f"
           playhead={playheadF}
           onSeek={(f) => seek(f * engine.duration)}

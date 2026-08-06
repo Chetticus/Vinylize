@@ -72,12 +72,23 @@ def test_groove_window_api() -> None:
     assert client.get(f"/api/session/{sid}/groove-window", params={"t": 1.0}).status_code == 404
 
     assert client.post("/api/process", json={"session_id": sid}).status_code == 200
-    r2 = client.get(f"/api/session/{sid}/groove-window", params={"t": 1.0, "span_mm": 60})
+
+    from app.dsp.constants import LEAD_IN_SECONDS
+
+    # Inside the silent lead-in the groove is honestly unmodulated…
+    r_lead = client.get(f"/api/session/{sid}/groove-window", params={"t": 1.0, "span_mm": 60})
+    _, lat_lead, _ = _parse(r_lead.content)
+    assert float(np.max(np.abs(lat_lead))) < 1e-5
+
+    # …and in the music region the 440 Hz tone shows visible modulation.
+    r2 = client.get(
+        f"/api/session/{sid}/groove-window",
+        params={"t": LEAD_IN_SECONDS + 1.0, "span_mm": 60},
+    )
     assert r2.status_code == 200
     h, lat, vert = _parse(r2.content)
     assert h["n"] > 100
     assert len(r2.content) == 4 * (HEADER_FLOATS + 2 * h["n"])
     assert np.all(np.isfinite(lat)) and np.all(np.isfinite(vert))
     assert h["turn_period_s"] > 1.7
-    # A 440 Hz tone cut at 100 mm has visible modulation in the window.
     assert float(np.max(np.abs(lat))) > 1e-4

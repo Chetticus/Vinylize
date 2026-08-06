@@ -21,12 +21,13 @@ export class PlaybackEngine {
   private gainOriginal: GainNode | null = null;
   private gainVinyl: GainNode | null = null;
 
-  // Master volume feeds a limiter, not the destination directly: the slider
-  // goes up to 4x (+12 dB) so quiet uploads get properly loud on laptop
-  // speakers, and the compressor catches what would otherwise hard-clip.
+  // Master volume feeds a safety limiter, not the destination directly. At
+  // the default 1x level the limiter sits at digital full scale and is
+  // effectively transparent, so "Original" really is the decoded upload.
+  // It only becomes active when the user deliberately boosts above 1x.
   private masterGain: GainNode | null = null;
   private limiter: DynamicsCompressorNode | null = null;
-  private volume = 2.0;
+  private volume = 1.0;
 
   private mode: PlaybackMode = "vinyl";
   private startedAtCtxTime = 0; // ctx.currentTime when playback began
@@ -71,12 +72,14 @@ export class PlaybackEngine {
       this.masterGain = this.ctx.createGain();
       this.masterGain.gain.value = this.volume;
       this.limiter = this.ctx.createDynamicsCompressor();
-      // Fast, deep limiting: only acts when the boosted signal would clip.
-      this.limiter.threshold.value = -3;
-      this.limiter.knee.value = 6;
-      this.limiter.ratio.value = 16;
-      this.limiter.attack.value = 0.002;
-      this.limiter.release.value = 0.25;
+      // A hard knee just below 0 dBFS leaves normal 1x playback untouched.
+      // The previous low threshold compressed both A and B at ordinary
+      // levels, coloring the reference and masking vinyl transients.
+      this.limiter.threshold.value = -0.2;
+      this.limiter.knee.value = 0;
+      this.limiter.ratio.value = 20;
+      this.limiter.attack.value = 0.001;
+      this.limiter.release.value = 0.08;
       this.masterGain.connect(this.limiter);
       this.limiter.connect(this.ctx.destination);
     }
@@ -103,7 +106,12 @@ export class PlaybackEngine {
     this.startOffset = Math.max(0, Math.min(offset ?? this.startOffset, this.duration - 0.01));
     this.gainOriginal = ctx.createGain();
     this.gainVinyl = ctx.createGain();
-    this.applyModeGains();
+    // Hard-set the initial values BEFORE the sources start: gain nodes are
+    // born at 1.0, and a ramp-from-1 would let ~50 ms of the muted rendition
+    // (vinyl clicks included) bleed under the other at every play/seek.
+    // Ramps are only for LIVE switches (applyModeGains).
+    this.gainOriginal.gain.value = this.mode === "original" ? 1 : 0;
+    this.gainVinyl.gain.value = this.mode === "vinyl" ? 1 : 0;
     this.gainOriginal.connect(this.masterGain!);
     this.gainVinyl.connect(this.masterGain!);
 
@@ -149,14 +157,28 @@ export class PlaybackEngine {
 
   private applyModeGains(): void {
     if (!this.ctx || !this.gainOriginal || !this.gainVinyl) return;
-    // 5 ms ramp: instant to the ear, but avoids a click at the crossover.
+    // A short linear crossfade is smooth but still precise for A/B listening.
+    // Linear gain keeps level constant when these synchronized signals match.
     const t = this.ctx.currentTime;
+    const end = t + 0.065;
     const target = this.mode === "original" ? this.gainOriginal : this.gainVinyl;
     const other = this.mode === "original" ? this.gainVinyl : this.gainOriginal;
-    target.gain.cancelScheduledValues(t);
-    other.gain.cancelScheduledValues(t);
-    target.gain.setTargetAtTime(1, t, 0.005);
-    other.gain.setTargetAtTime(0, t, 0.005);
+
+    this.holdGain(target.gain, t);
+    this.holdGain(other.gain, t);
+    target.gain.linearRampToValueAtTime(1, end);
+    other.gain.linearRampToValueAtTime(0, end);
+  }
+
+  /** Preserve the current value if a rapid second click interrupts a fade. */
+  private holdGain(param: AudioParam, at: number): void {
+    if (typeof param.cancelAndHoldAtTime === "function") {
+      param.cancelAndHoldAtTime(at);
+      return;
+    }
+    const value = param.value;
+    param.cancelScheduledValues(at);
+    param.setValueAtTime(value, at);
   }
 
   private stopSources(): void {

@@ -11,7 +11,9 @@ the payload ~4x and stall the client in JSON.parse.
 from __future__ import annotations
 
 import io
+from dataclasses import replace
 
+import numpy as np
 import soundfile as sf
 from fastapi import APIRouter, File, HTTPException, UploadFile
 from fastapi.concurrency import run_in_threadpool
@@ -22,7 +24,7 @@ from app.api.sessions import Session, store
 from app.audio.demo import synthesize_demo
 from app.audio.ingestion import AudioIngestError, DecodedAudio, decode_upload
 from app.audio.waveform import peak_decimate
-from app.dsp.constants import GROOVE_HALF_WIDTH_M, GROOVE_PITCH_M
+from app.dsp.constants import GROOVE_HALF_WIDTH_M, GROOVE_PITCH_M, LEAD_IN_SECONDS
 from app.dsp.pipeline import PipelineConfig, PipelineResult, run as run_pipeline
 from app.explain.metrics import analyze as analyze_track
 from app.explain.registry import build_cards
@@ -99,15 +101,32 @@ def _process_sync(session: Session, req: schemas.ProcessRequest) -> schemas.Proc
 
     audio = session.audio
     session.progress_frac, session.progress_label = 0.0, "Starting"
-    result: PipelineResult = run_pipeline(
-        audio.samples, audio.sample_rate, config, progress=report
+
+    # Cut a real silent lead-in ahead of the music: the stylus then rides
+    # unmodulated groove — with its honest hiss/clicks/rumble — before the
+    # first musical turn arrives, like a pressed record. The A/B original
+    # gets the same silence below so both renditions stay sample-locked.
+    n_lead = int(LEAD_IN_SECONDS * audio.sample_rate)
+    padded = np.concatenate(
+        [np.zeros((n_lead, audio.samples.shape[1]), dtype=np.float32), audio.samples]
     )
+
+    result: PipelineResult = run_pipeline(padded, audio.sample_rate, config, progress=report)
 
     # Use the pipeline's *effective* placement (long clips get clamped
     # outward so they physically fit the program area) — the Explorer and
     # the 3D view must describe the disc as cut, not as requested.
+    # Measurements run on the MUSIC region only (lead-in silence would poison
+    # the quiet-passage and band-energy numbers); moment timestamps then
+    # shift by the lead-in so they match the transport clock.
     session.progress_frac, session.progress_label = 0.82, "Measuring your track"
-    obs = analyze_track(audio.samples, result.vinyl, audio.sample_rate)
+    obs = analyze_track(audio.samples, result.vinyl[n_lead:], audio.sample_rate)
+    obs = replace(
+        obs,
+        brightest_moment_s=obs.brightest_moment_s + LEAD_IN_SECONDS,
+        loudest_moment_s=obs.loudest_moment_s + LEAD_IN_SECONDS,
+        quietest_moment_s=obs.quietest_moment_s + LEAD_IN_SECONDS,
+    )
     cards = build_cards(
         result.stage_metrics,
         obs,
@@ -125,7 +144,7 @@ def _process_sync(session: Session, req: schemas.ProcessRequest) -> schemas.Proc
 
     session.progress_frac, session.progress_label = 0.9, "Encoding audio"
     session.vinyl_wav = _to_wav(result.vinyl, audio.sample_rate)
-    session.original_wav = _to_wav(audio.samples, audio.sample_rate)
+    session.original_wav = _to_wav(padded, audio.sample_rate)
     session.geometry_bin = result.geometry.as_binary()
     session.progress_frac, session.progress_label = 1.0, "Done"
 

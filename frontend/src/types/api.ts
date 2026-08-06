@@ -50,13 +50,16 @@ export const DEFAULT_CONFIG: ProcessConfig = {
   clicks: true,
   crosstalk: true,
   noise: true,
-  start_radius_mm: 100,
-  stylus_size: 1.5,
-  saturation_drive: 2,
-  wow_depth: 2.5,
-  click_density: 3,
-  crosstalk_amount: 1.5,
-  noise_level: 3,
+  start_radius_mm: 146, // outer edge: the stylus drops onto the rim lead-in
+  // Educational "worn favorite" preset: stronger than a clean pressing so
+  // the physical effects remain obvious on laptop speakers. Use 1x controls
+  // for the subtler measured-realism version of the same model.
+  stylus_size: 2.75,
+  saturation_drive: 4,
+  wow_depth: 3,
+  click_density: 4,
+  crosstalk_amount: 2,
+  noise_level: 4,
   seed: 1109,
 };
 
