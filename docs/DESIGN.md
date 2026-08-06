@@ -768,3 +768,118 @@ overruled it is worth less than one that does.
     world-fixed clipping plane just ahead of the stylus provides the cutaway. *(e)* The
     tonearm IK moved to true radii unchanged in structure (self-check still 0.000 mm),
     and the readout HUD became closeable with a reopen button.
+
+15. **v0.7: art direction pass + two correctness fixes.** *(a) The flat-black-disc
+    regression*: the groove shader ended with three.js's `<tonemapping_fragment>`
+    include chunks, which reference renderer-injected functions a raw ShaderMaterial
+    doesn't get — the shader failed to compile and the record surface vanished.
+    Replaced with a manual Reinhard + sRGB encode, and the fix is verified by
+    compiling the shipped GLSL against a live WebGL2 context with three's exact
+    ES 3.00 prologue. The shader also gained real record anatomy (wide-pitch lead-in,
+    lead-out spiral, locked runout groove), which matters for honesty: a short clip's
+    program band is only ~1 mm wide, and without lead-out grooves an honest disc reads
+    as "broken" rather than "mostly blank, like a real short-program side".
+    *(b) "Original" wasn't pure*: both renditions always play sample-locked and A/B
+    flips gains — but gain nodes are created at 1.0 and were only ramped toward 0, so
+    ~50 ms of vinyl clicks bled under the original after every play/seek. Gains are
+    now hard-initialized to the mode before sources start; ramps remain for live
+    switches only. Also: the macro stylus now rests exactly on the record surface
+    plane with compliance clamped to 0.25 mm (it previously oscillated up to 1.2 mm
+    through the disc). *(c) The relight*: image-based lighting from three's built-in
+    RoomEnvironment (PMREM, no downloads) so glossy blacks read as shape; café rig
+    became motivated late-afternoon light (sun key through a golden-dusk window,
+    hemisphere skylight, desk-lamp practical by the tonearm, cool rim); materials
+    separated by value — polished-PVC vinyl (clearcoat 1.0), charcoal platter with a
+    polished rim, brushed-aluminum arm tube, richer walnut with imperfections; fov 34
+    close product framing; set dressing gained a desk lamp, a framed RIAA-curve
+    poster, a plant, and books. Depth-of-field remains fog-based by choice: a real
+    DOF post-pass would cost a dependency and per-frame GPU for a background that
+    fog already softens.
+
+16. **v0.8: the vinyl surface — procedural groove relief on real PBR.** The record's
+    custom `ShaderMaterial` was the reason it read as a flat CG disc: a raw shader
+    cannot see the scene's environment map or do clearcoat, so its blacks had nothing
+    to reflect. Replaced with a `MeshPhysicalMaterial` (polished black PVC: near-black
+    albedo, metalness 0, clearcoat 1.0 at 0.045 roughness) patched via
+    `onBeforeCompile`, which inherits the PMREM environment, a true clearcoat lobe and
+    every scene light — so reflections *reveal* the grooves instead of the shader
+    faking them.
+    *Technique*: grooves are an analytic height field whose slope perturbs both the
+    base and clearcoat normals. Displaced geometry was rejected outright — 0.25 mm
+    pitch over a 152 mm disc is ~600 turns, needing millions of radial segments to
+    satisfy Nyquist, for features that are microscopic and never affect the
+    silhouette. The profile is a Gaussian valley (smooth, closed-form derivative); fed
+    the real numbers (35 µm deep, 30 µm half-width) its peak slope derives to
+    **0.858·depth/halfWidth = 1.0 = 45°**, the actual Westrex wall angle — the look
+    falls out of the physics rather than being dialled in.
+    *Sub-pixel behavior* is the load-bearing detail: grooves fade out below a pixel
+    and the slope variance they carried is folded into microfacet roughness
+    (Toksvig-style, `sqrt(rough² + lostVar)`, scaled by groove coverage). That is what
+    a real record does — rings up close, satin sheen that shimmers under a moving
+    light at distance — and it eliminates moiré as a consequence rather than by
+    blurring detail away. The valley's *coverage average* also survives the fade, so
+    the recorded band stays faintly readable at any distance.
+    *Bug found by testing*: the first cut tied groove half-width to a fraction of the
+    pitch, which flattened the wide-pitch run-out to an invisible ~8° ripple (measured
+    contrast: 0). A real groove has the same cross-section wherever it is cut — only
+    the land between turns widens. Half-width is now physical (mm), pitch cancels out
+    of the wall angle, and the run-out measures 2.0 mm/cycle against its 1.89 mm pitch
+    while the music band resolves at 0.25 mm — ~8× wider spacing, as intended.
+    Loudness now drives groove width *and* depth (a proxy for real lateral excursion),
+    plus pressing variation, sleeve scuffs, dust and polish variation that are gated on
+    camera proximity so they only appear on inspection.
+    *Needle*: the cantilever rod terminated at (5.6, −2.2) — beside the stylus cone's
+    *point* rather than in its base — which is why the needle looked detached. Rod and
+    cone now share an exact endpoint (measured gap: 0.0000 mm), with the apex at world
+    y −0.36 (the record surface) and exactly 229 mm from the pivot, matching the IK's
+    effective length. The microscope's cantilever taper was also inverted (thick end at
+    the diamond) and is now correct.
+
+17. **v0.9: textures over shaders, and a real lead-in.** *(a) Vinyl surface, third
+    iteration*: the onBeforeCompile-patched material was replaced by a bone-stock
+    `MeshPhysicalMaterial` with a generated 16×4096 texture strip on POLAR UVs
+    (u = angle, v = radius — one strip describes the disc by radius alone and wraps
+    seamlessly). Probing exposed why the patched shader "moved" with the camera —
+    and would have bitten a bumpMap too: three's bump shader measures height deltas
+    per *screen pixel* (measured 11× strength swing between close-up and
+    mid-distance), so the relief ships as a **normal map** instead (view-independent
+    by construction; measured swing 74 vs 69 across a 2× zoom), feeding both the base
+    normal and `clearcoatNormalMap` so the gloss shimmer follows the rings. Trilinear
+    mips handle minification with per-frame temporal stability. Grooves now cover the
+    whole playable surface (rim margin → 0.25 mm-pitch field → 1.6 mm run-out spiral →
+    locked groove → dead wax), with the clip's program band loudness-modulating depth
+    and roughness inside the field. A second probe-caught bug: the first texture pass
+    reused the shader's pitch-fraction valley width, flattening the run-out to zero
+    contrast; widths are physical mm again. *(b) 6-second lead-in*: implemented in the
+    honest place — the backend prepends silence *before cutting*, so the stylus rides
+    ~3 turns of real unmodulated groove whose hiss/clicks/rumble come from the
+    existing physics, not from a canned intro sample. The A/B original is padded
+    identically (sample-locked, and still bit-silent — the earlier gain-init fix keeps
+    Original free of bleed), waveform peaks are recomputed client-side from the padded
+    buffers so playheads align, Explorer moment timestamps shift by the lead-in, and
+    the default cut placement moved to the outer edge so the arm drops at the rim and
+    tracks inward. Radial travel remains honest: a 3-minute clip crosses 25 mm; only a
+    full ~22-minute side would carry the arm to the label.
+
+18. **v0.10: making the rotation visible.** User-reported and physically true: perfect
+    concentric rings are rotationally symmetric, so the spinning record rendered
+    identically every frame — only the label betrayed motion. Fixes, in order of
+    measured strength: *(a) eccentric wobble* — the DSP already models the off-center
+    spindle hole as wow; the same defect is now visible: the record group carries a
+    0.45 mm offset in the rotating frame (IEC pressing tolerance allows up to ~0.9 mm),
+    so rings and rim breathe once per revolution — measured 6.5% of disc pixels
+    visibly changing per 0.35 rad of rotation, vs 0.2% before. The offset fades with
+    camera proximity so the microscope trench stays under the stylus, and the spindle
+    moved out of the wobbling group (the record wobbles around it, as in reality).
+    *(b) The platter now spins* (it always should have) and carries two rings of
+    instanced strobe studs on its exposed margin — the feature real decks have
+    precisely so the eye can verify rotation. *(c) Angular surface variation*: the
+    roughness map became genuinely 2D (groove sparkle keyed to per-turn loudness,
+    pressing haze, dust) and the normal map gained loudness-keyed tangential
+    micro-waviness, mm-scale polish domains, and hairline scratches with single-signed
+    wall tilt that flash crossing the key light. Honest finding from probing: these
+    tilt-based cues measure small under a uniform test environment (0.4-0.8% pixel
+    change) because near-black dielectrics only show normal changes where angular
+    light contrast exists — they are the close-range garnish; wobble, strobe dots and
+    label do the heavy lifting at overview. The old translucent sheen overlay was
+    removed as superseded.
