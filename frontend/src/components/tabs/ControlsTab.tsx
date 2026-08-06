@@ -110,9 +110,9 @@ export default function ControlsTab() {
         <h3>Physical stages</h3>
         <p className="sub">
           Every toggle is one physical mechanism. <b>1× = pristine-pressing reality</b>; the
-          defaults are deliberately set to a well-worn, mid-disc record so the character is
-          unmistakable — dial back toward 1× to hear how subtle real vinyl can be. Audio and the
-          3D groove update together.
+          defaults model a well-worn record under a worn stylus so the character is
+          unmistakable even at the rim's fast groove speed — dial back toward 1× to hear how
+          subtle real vinyl can be. Audio and the 3D groove update together.
           {loading && " Re-simulating…"}
         </p>
         {STAGES.map((stage) => {

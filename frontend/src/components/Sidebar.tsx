@@ -13,7 +13,8 @@ const CONCEPTS: Array<[string, string]> = [
 ];
 
 export default function Sidebar() {
-  const { analysis, library, selectSession, upload, useDemo, loading, setTab } = useStore();
+  const { analysis, library, selectSession, upload, useDemo, loading, openExplorerCard } =
+    useStore();
   const fileInput = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
 
@@ -114,9 +115,12 @@ export default function Sidebar() {
       <div className="side-section">
         <h2>Vinyl engineering</h2>
         <ul className="concept-list">
-          {CONCEPTS.map(([label]) => (
-            <li key={label} onClick={() => setTab("explorer")}>
-              {label}
+          {CONCEPTS.map(([label, cardKey]) => (
+            <li key={cardKey} onClick={() => openExplorerCard(cardKey)}>
+              <span>{label}</span>
+              <span className="concept-go" aria-hidden>
+                ›
+              </span>
             </li>
           ))}
         </ul>
