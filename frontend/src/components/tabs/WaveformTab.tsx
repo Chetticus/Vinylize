@@ -42,10 +42,9 @@ export default function WaveformTab() {
       <div className="panel">
         <h3>What happens next</h3>
         <p className="sub" style={{ marginBottom: 0 }}>
-          This signal has been RIAA pre-emphasized, encoded into lateral + vertical groove motion,
-          and engraved along an Archimedean spiral. Open the <b>3D Groove</b> tab to inspect the
-          result, <b>Compare</b> to hear it played back, and the <b>Explorer</b> to see what each
-          physical stage did to this exact clip.
+          This clip has been cut into a spiral groove on a virtual record. Open the{" "}
+          <b>3D Groove</b> tab to look at it, <b>Compare</b> to hear it played back through a
+          stylus, and <b>The Vinyl Story</b> for where the format came from.
         </p>
       </div>
     </div>

@@ -3,13 +3,14 @@ import { useRef, useState } from "react";
 import { useStore } from "../state/store";
 
 const CONCEPTS: Array<[string, string]> = [
-  ["A groove is a velocity signal", "riaa"],
-  ["Why the last track sounds worst", "stylus"],
-  ["Where 'warmth' really comes from", "compliance"],
-  ["The off-center hole you can hear", "wow_flutter"],
-  ["Anatomy of a click", "clicks"],
-  ["Two channels, one stylus", "crosstalk"],
-  ["The medium's noise floor", "noise"],
+  ["The first recorded voice", "edison"],
+  ["Why discs beat cylinders", "berliner"],
+  ["Why songs are 3 minutes long", "shellac"],
+  ["The album is invented", "lp"],
+  ["Two channels, one groove", "stereo"],
+  ["Secrets in the dead wax", "sleeve"],
+  ["Hip-hop saves the format", "turntablism"],
+  ["The comeback", "revival"],
 ];
 
 export default function Sidebar() {
@@ -113,7 +114,7 @@ export default function Sidebar() {
       )}
 
       <div className="side-section">
-        <h2>Vinyl engineering</h2>
+        <h2>The story</h2>
         <ul className="concept-list">
           {CONCEPTS.map(([label, cardKey]) => (
             <li key={cardKey} onClick={() => openExplorerCard(cardKey)}>

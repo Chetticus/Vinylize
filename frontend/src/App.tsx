@@ -10,7 +10,7 @@ const TABS: Array<[TabKey, string]> = [
   ["waveform", "Waveform"],
   ["groove", "3D Groove"],
   ["compare", "Compare"],
-  ["explorer", "Engineering Explorer"],
+  ["explorer", "The Vinyl Story"],
 ];
 
 function Placeholder() {

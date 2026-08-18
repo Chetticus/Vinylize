@@ -1,140 +1,115 @@
 /**
- * Engineering Explorer — master-detail around the actual signal chain.
+ * The Vinyl Story — a short illustrated history of the record.
  *
- * The left rail is the pipeline itself: seven stages grouped into the three
- * physical phases (cutting the lacquer, the groove medium, playback), in
- * processing order.
- * Selecting a stage fills the reading pane; sidebar concept links deep-link
- * here via store.explorerFocus.
+ * Master-detail: the left rail is a timeline grouped into three eras, the
+ * right pane is the chapter as a piece of writing. Content lives in
+ * content/vinylStory.ts; sidebar links deep-link to a chapter through
+ * store.explorerFocus.
+ *
+ * This tab used to explain the DSP pipeline stage by stage. It now tells the
+ * history instead — the physics is something the app should let you *hear*,
+ * not something a visitor should have to read a manual about.
  */
 
 import { useEffect, useState } from "react";
 
 import { useStore } from "../../state/store";
-import type { ExplorerCard } from "../../types/api";
-
-/** Pipeline phases (matches DESIGN.md §4: Phase A/B/C). */
-const PHASES: Array<{ label: string; keys: string[] }> = [
-  { label: "Phase A · Cutting the master", keys: ["riaa"] },
-  { label: "Phase B · The groove medium", keys: ["stylus", "compliance"] },
-  { label: "Phase C · Playback", keys: ["wow_flutter", "clicks", "crosstalk", "noise"] },
-];
-
-/** Monochrome stage glyphs — typographic, deliberately not emoji. */
-const GLYPHS: Record<string, string> = {
-  riaa: "∿",
-  stylus: "◆",
-  compliance: "≋",
-  wow_flutter: "◐",
-  clicks: "✳",
-  crosstalk: "⇄",
-  noise: "▒",
-};
-
-const SECTION_META: Array<{ field: keyof ExplorerCard; label: string }> = [
-  { field: "physics", label: "The physics" },
-  { field: "where_on_record", label: "Where it lives on a record" },
-  { field: "why_unavoidable", label: "Why engineers can't eliminate it" },
-];
+import { ALL_CHAPTERS, VINYL_STORY } from "../../content/vinylStory";
 
 export default function ExplorerTab() {
-  const { processResult, analysis, explorerFocus, clearExplorerFocus, setTab } = useStore();
-  const [selectedKey, setSelectedKey] = useState("stylus");
+  const { explorerFocus, clearExplorerFocus, setTab } = useStore();
+  const [selectedKey, setSelectedKey] = useState(ALL_CHAPTERS[0].key);
 
-  // Sidebar deep links: honor the requested card, then clear the request.
+  // Sidebar deep links: honour the requested chapter, then clear the request.
   useEffect(() => {
     if (explorerFocus) {
-      setSelectedKey(explorerFocus);
+      if (ALL_CHAPTERS.some((c) => c.key === explorerFocus)) setSelectedKey(explorerFocus);
       clearExplorerFocus();
     }
   }, [explorerFocus, clearExplorerFocus]);
 
-  if (!processResult) return null;
-  const cards = processResult.cards;
-  const byKey = new Map(cards.map((c) => [c.key, c]));
-  const selected = byKey.get(selectedKey) ?? cards[0];
-  const stageNumber = cards.findIndex((c) => c.key === selected.key) + 1;
+  const selected = ALL_CHAPTERS.find((c) => c.key === selectedKey) ?? ALL_CHAPTERS[0];
+  const index = ALL_CHAPTERS.findIndex((c) => c.key === selected.key);
+  const era = VINYL_STORY.find((e) => e.chapters.some((c) => c.key === selected.key));
+  const next = ALL_CHAPTERS[index + 1];
 
   return (
     <div className="explorer-layout">
-      {/* ------------------------- signal-chain rail ------------------------- */}
-      <nav className="stage-rail" aria-label="Pipeline stages">
-        <div className="rail-title">Signal chain</div>
-        {PHASES.map((phase) => (
-          <div className="rail-phase" key={phase.label}>
-            <div className="rail-phase-label">{phase.label}</div>
-            {phase.keys.map((key) => {
-              const card = byKey.get(key);
-              if (!card) return null;
-              const idx = cards.findIndex((c) => c.key === key) + 1;
-              return (
-                <button
-                  key={key}
-                  className={
-                    `rail-stage${card.key === selected.key ? " active" : ""}` +
-                    `${card.enabled ? "" : " bypassed"}`
-                  }
-                  onClick={() => setSelectedKey(key)}
-                >
-                  <span className="rail-glyph" aria-hidden>
-                    {GLYPHS[key] ?? "•"}
-                  </span>
-                  <span className="rail-text">
-                    <span className="rail-name">{card.title}</span>
-                    <span className="rail-sub">
-                      {String(idx).padStart(2, "0")} · {card.enabled ? "active" : "bypassed"}
-                    </span>
-                  </span>
-                </button>
-              );
-            })}
+      {/* ------------------------------ timeline ------------------------------ */}
+      <nav className="stage-rail" aria-label="Vinyl history timeline">
+        <div className="rail-title">A short history</div>
+        {VINYL_STORY.map((eraGroup) => (
+          <div className="rail-phase" key={eraGroup.label}>
+            <div className="rail-phase-label">{eraGroup.label}</div>
+            {eraGroup.chapters.map((chapter) => (
+              <button
+                key={chapter.key}
+                className={`rail-stage${chapter.key === selected.key ? " active" : ""}`}
+                onClick={() => setSelectedKey(chapter.key)}
+              >
+                <span className="rail-glyph" aria-hidden>
+                  {chapter.glyph}
+                </span>
+                <span className="rail-text">
+                  <span className="rail-name">{chapter.title}</span>
+                  <span className="rail-sub">{chapter.year}</span>
+                </span>
+              </button>
+            ))}
           </div>
         ))}
         <p className="rail-footnote">
-          Every stage is one physical mechanism the simulation reproduces on your own audio.
+          Roughly 150 years of a format that has been declared obsolete at least twice.
         </p>
       </nav>
 
-      {/* --------------------------- reading pane --------------------------- */}
+      {/* ------------------------------- chapter ------------------------------- */}
       <article className="stage-detail" key={selected.key}>
         <header className="stage-header">
           <div className="stage-glyph" aria-hidden>
-            {GLYPHS[selected.key] ?? "•"}
+            {selected.glyph}
           </div>
           <div className="stage-heading">
             <div className="stage-kicker">
-              Stage {String(stageNumber).padStart(2, "0")} of {String(cards.length).padStart(2, "0")}
-              <span className={`stage-pill${selected.enabled ? " on" : ""}`}>
-                {selected.enabled ? "active in your render" : "bypassed"}
+              {era?.label ?? ""}
+              <span className="stage-pill">
+                Chapter {String(index + 1).padStart(2, "0")} of{" "}
+                {String(ALL_CHAPTERS.length).padStart(2, "0")}
               </span>
             </div>
+            <div className="story-year">{selected.year}</div>
             <h2>{selected.title}</h2>
             <p className="stage-sub">{selected.subtitle}</p>
           </div>
         </header>
 
-        {SECTION_META.map(({ field, label }) => (
-          <section className="stage-section" key={field}>
-            <h4>{label}</h4>
-            <p>{selected[field] as string}</p>
-          </section>
-        ))}
+        <section className="stage-section">
+          {selected.paragraphs.map((text, i) => (
+            <p key={i}>{text}</p>
+          ))}
+        </section>
 
-        {selected.your_track.length > 0 && (
+        {selected.fact && (
+          <section className="stage-section footnote-fact">
+            <p>{selected.fact}</p>
+          </section>
+        )}
+
+        {selected.yourRecord && (
           <section className="stage-section measured">
-            <h4>
-              Measured from your upload
-              {analysis && <span className="measured-file"> · {analysis.filename}</span>}
-            </h4>
-            {selected.your_track.map((line, i) => (
-              <p key={i}>{line}</p>
-            ))}
+            <h4>On your record</h4>
+            <p>{selected.yourRecord}</p>
           </section>
         )}
 
         <footer className="stage-actions">
+          {next && (
+            <button className="btn small" onClick={() => setSelectedKey(next.key)}>
+              {next.year} · {next.title} ›
+            </button>
+          )}
           <button className="btn small" onClick={() => setTab("compare")}>
-            ⇄ Hear it in Compare
+            ⇄ Back to listening
           </button>
         </footer>
       </article>
