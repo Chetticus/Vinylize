@@ -5,14 +5,14 @@ import { useStore } from "../state/store";
 /** Sidebar jump-points into The Vinyl Story (keys match content/vinylStory). */
 const CONCEPTS: Array<[string, string]> = [
   ["Start here — the needle drops", "prologue"],
-  ["When music couldn't be kept", "before"],
-  ["The first recorded voice", "first-sounds"],
-  ["Why discs beat cylinders", "discs"],
-  ["The album is invented", "modern-vinyl"],
+  ["Before music could be kept", "before"],
+  ["The first sounds played back", "first-sounds"],
+  ["From cylinders to discs", "discs"],
+  ["The birth of the modern LP", "modern-vinyl"],
   ["Inside the groove", "inside-groove"],
   ["Why vinyl sounds like vinyl", "why-sounds"],
-  ["Hip-hop reinvents the record", "changes-music"],
-  ["The comeback", "refused"],
+  ["When the record became an instrument", "changes-music"],
+  ["The record that refused to disappear", "refused"],
 ];
 
 export default function Sidebar() {

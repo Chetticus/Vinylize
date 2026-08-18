@@ -167,6 +167,21 @@ export default function ExplorerTab() {
 
         {selected.question && <p className="story-question">{selected.question}</p>}
 
+        {selected.sources && selected.sources.length > 0 && (
+          <details className="story-sources">
+            <summary>Sources</summary>
+            <ul>
+              {selected.sources.map((src) => (
+                <li key={src.url}>
+                  <a href={src.url} target="_blank" rel="noreferrer noopener">
+                    {src.label}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </details>
+        )}
+
         <footer className="story-nav">
           {prev ? (
             <button className="btn small" onClick={() => goto(prev.key)}>

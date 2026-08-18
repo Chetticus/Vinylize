@@ -1,21 +1,32 @@
 /**
  * The Story of Vinyl — editorial content for the story tab.
  *
- * Structure: a prologue, ten chapters and an epilogue, grouped into acts
- * that run wonder → invention → culture → science → decline → revival →
- * Vinylize. The central idea the whole thing serves:
+ * Structure: prologue, five acts holding ten chapters, epilogue. Every
+ * section keeps the same four-beat rhythm — the moment (a human scene),
+ * what changed (the historical idea), hear the difference (an audio
+ * demonstration), explore the object (an interaction in the 3D room).
  *
- *   Humans found a way to turn invisible sound into a physical object,
- *   and that object changed how we experience music.
+ * EDITORIAL RULE, and the reason several beats read cautiously: the "hear"
+ * and "explore" beats may only describe things this build actually does.
+ * Audited against the implementation —
  *
- * Every section follows the same four-beat rhythm — the moment (a human
- * scene), what changed (the historical idea), hear the difference (an audio
- * demonstration), explore the object (an interaction in the 3D room). The
- * last two beats carry optional actions that jump into the app, so the
- * history stays connected to the thing the visitor just made.
+ *   verified true : platter turns at exactly 33 1/3 rpm (grooveMath.OMEGA);
+ *                   the tonearm angle is solved from the playback position;
+ *                   groove geometry is generated from the uploaded audio
+ *                   (pipeline.build_geometry + the retained detail arrays);
+ *                   groove pitch, radius and turn count are true scale;
+ *                   clicks are scattered over arc length and mapped to time
+ *                   through the spiral, so their rate follows groove speed;
+ *                   clicking the groove seeks playback.
+ *   deliberately   : audio modulation in the 3D view is magnified and
+ *   exaggerated      labelled on screen; the shipped effect amounts are a
+ *                    "worn favourite" preset, louder than measured realism.
+ *   NOT available  : per-effect toggles, 78/45 rpm playback, cylinder vs
+ *                    disc comparison, stamper/pressing animation, a format
+ *                    timeline, a sleeve, or a scratching demonstration.
  *
- * Static data: no backend round-trip, and readable with nothing on the
- * platter.
+ * Do not add copy promising any of the unavailable items without building
+ * them first. Sources are attached per chapter and surfaced quietly.
  */
 
 /** Tabs a story action can send the reader to. */
@@ -24,6 +35,11 @@ export type ActionTarget = "compare" | "groove" | "waveform";
 export interface StoryAction {
   label: string;
   target: ActionTarget;
+}
+
+export interface StorySource {
+  label: string;
+  url: string;
 }
 
 export interface StoryBeat {
@@ -35,7 +51,7 @@ export interface StoryChapter {
   /** Stable id — also the deep-link key used by the sidebar. */
   key: string;
   kind: "prologue" | "chapter" | "epilogue";
-  /** Rail/pill label: "Prologue", "Chapter 03", "Epilogue". */
+  /** Rail/pill label: "Prologue", "Chapter 3", "Epilogue". */
   label: string;
   /** Short typographic mark (never emoji). */
   glyph: string;
@@ -51,6 +67,7 @@ export interface StoryChapter {
   explore?: StoryBeat;
   /** Reflective closer (epilogue only). */
   question?: string;
+  sources?: StorySource[];
 }
 
 export interface StoryAct {
@@ -58,298 +75,371 @@ export interface StoryAct {
   chapters: StoryChapter[];
 }
 
+const LOC_TIMELINE: StorySource = {
+  label: "Library of Congress — recorded-sound timeline",
+  url: "https://www.loc.gov/programs/national-recording-preservation-plan/tools-and-resources/historical-background/timeline/",
+};
+
 export const VINYL_STORY: StoryAct[] = [
   {
-    label: "Opening",
+    label: "Prologue",
     chapters: [
       {
         key: "prologue",
         kind: "prologue",
         label: "Prologue",
         glyph: "◉",
-        title: "The needle drops",
-        subtitle: "A record starts turning, and something makes a sound before the music does",
+        title: "The Needle Drops",
+        subtitle: "With vinyl, the medium is never completely hidden",
         moment: [
-          "A motor comes up to speed. The platter settles at thirty-three and a third turns a minute. The arm swings out, hesitates, and lowers — and for a second or two before any music arrives, you hear something anyway: a soft rush, maybe a tick.",
-          "That is the sound of a diamond touching a piece of plastic. Every record begins this way. The noise before the music is not a fault in the recording; it is the medium introducing itself.",
+          "A motor comes up to speed. The platter settles at thirty-three and a third revolutions per minute. The arm moves inward, pauses, and lowers. Before the music arrives, you hear something else: a soft rush, perhaps a tick.",
+          "That brief sound is the record, the stylus, and the playback system revealing themselves. With vinyl, the medium is never completely hidden.",
         ],
         whatChanged: [
-          "Underneath the ritual sits a question that ought to sound impossible. How does a groove about a twentieth of a millimetre wide hold an entire performance — a drummer, a bassline, a voice, a room's worth of air — and give it back on demand, a hundred times over?",
-          "The rest of this story is a hundred and fifty years of people answering that question. And then discovering that the answer had quietly changed music itself.",
+          "A modern record holds sound in one continuous spiral groove. Its movements are microscopic, yet they can carry the shape of a voice, the strike of a drum, and the space around a performance.",
+          "How can a physical groove give all of that back on demand?",
+          "The answer took more than a century of experiments — and eventually changed not only how music was stored, but how it was written, sold, shared, collected, and performed.",
         ],
         hear: {
-          text: "Press play. The first six seconds of your record are a silent lead-in groove — no music is cut there at all. Whatever you hear in that gap is the surface of the disc.",
-          action: { label: "⇄ Listen in Compare", target: "compare" },
+          text: "Listen to the lead-in before the song begins. Vinylize cuts six seconds of silence into the groove ahead of your music, so anything audible in that gap comes from the simulated surface: noise, rumble and dust rather than your recording.",
+          action: { label: "⇄ Listen to the lead-in", target: "compare" },
         },
         explore: {
-          text: "Watch the needle settle onto the outer edge and then track slowly inward, the way a real arm crosses a side.",
+          text: "Follow the stylus as it settles near the outer edge and travels slowly inward. The platter turns at a true 33⅓ rpm against the audio clock, and the arm's angle is solved from the current playback position rather than animated.",
           action: { label: "◎ Open the 3D room", target: "groove" },
         },
       },
     ],
   },
   {
-    label: "I · Wonder and invention",
+    label: "Act I — Wonder and Invention",
     chapters: [
       {
         key: "before",
         kind: "chapter",
-        label: "Chapter 01",
+        label: "Chapter 1",
         glyph: "◌",
-        title: "Before music could be kept",
-        subtitle: "A world where every performance happened exactly once",
+        title: "Before Music Could Be Kept",
+        subtitle: "A world where performances could be remembered, but not replayed",
         moment: [
-          "Imagine wanting to hear a song again in 1850. There is precisely one way to do it: find musicians and ask them to play it again. If the singer has left town, the song has left with them.",
-          "A melody could be written down. A voice could not — not its grain, not its timing, not the particular night when everything went right.",
+          "Imagine hearing a remarkable singer in 1850. You could describe the performance, write down the melody, or learn to perform it yourself. What you could not preserve was that particular voice in that particular room on that particular day.",
+          "Music notation could save a composition. It could not save an acoustic event.",
         ],
         whatChanged: [
-          "Photography had already shown that a fleeting thing could be fixed to a surface. By the 1840s people could hold a likeness of a face that no longer looked that way. The obvious next question was whether sound could be caught the same way.",
-          "In 1857 a Parisian printer named Édouard-Léon Scott de Martinville got remarkably close. His phonautograph traced sound onto soot-blackened paper as fine wavy lines. He captured real voices — and had no way whatsoever to play them back. He was writing in a language nobody could yet read.",
-          "That is what makes recorded sound revolutionary rather than merely convenient. It did not improve on an existing way of keeping music. There was no existing way.",
+          "Photography had shown that a fleeting image could be fixed to a surface. Inventors began asking whether sound could be captured too.",
+          "In 1857, French printer and inventor Édouard-Léon Scott de Martinville patented the phonautograph. A vibrating membrane moved a stylus that traced sound waves onto a soot-darkened surface. The machine was designed to make sound visible, not to play it back.",
+          "More than a century later, researchers used optical scanning and computers to recover sound from surviving phonautograms. Scott had preserved traces that people in his lifetime had no way to hear again.",
         ],
         hear: {
-          text: "Nothing — and that is the chapter. Until the 1870s there was no such thing as replaying a sound. Every button in this app would have been unimaginable.",
+          text: "There is no playback button in this part of the story. The phonautograph could inscribe sound, but it could not mechanically reproduce it.",
         },
         explore: {
-          text: "The wavy line Scott drew on paper is the same shape carved into the groove wall in the 3D room. He had the picture; what he lacked was the needle to read it back.",
-          action: { label: "◎ See the wave in the groove", target: "groove" },
+          text: "Zoom into the magnified groove view. Vinylize has no phonautogram to show beside it, but the wavy line in the groove wall is generated from your uploaded audio and rests on the same insight Scott had: vibration can leave a readable pattern on a surface.",
+          action: { label: "◎ See the pattern", target: "groove" },
         },
+        sources: [LOC_TIMELINE],
       },
       {
         key: "first-sounds",
         kind: "chapter",
-        label: "Chapter 02",
+        label: "Chapter 2",
         glyph: "◎",
-        title: "The first captured sounds",
-        subtitle: "A machine says a nursery rhyme back to the man who spoke it",
+        title: "The First Sounds Played Back",
+        subtitle: "A machine repeats a human voice",
         moment: [
-          "Menlo Park, New Jersey, 1877. Thomas Edison wraps a sheet of tinfoil around a grooved cylinder, leans into a horn with a needle at its throat, and turns a crank while reciting a nursery rhyme. Then he sets the needle back at the start and turns the crank again.",
-          "The horn says: “Mary had a little lamb.” By several accounts the people in the room were unsettled by it. The machine had done something no machine had ever done.",
+          "Menlo Park, New Jersey, late 1877. Thomas Edison speaks into a machine built around a cylinder wrapped in tinfoil. A stylus presses the vibrations of his voice into the foil. When the cylinder is returned to the beginning, the machine plays the sound back.",
+          "“Mary Had a Little Lamb” is traditionally reported as the first test. Whether every detail of the familiar story happened exactly as later retellings describe, the achievement was real: a device had recorded and reproduced sound.",
         ],
         whatChanged: [
-          "The principle is almost embarrassingly simple, and it has not changed since. Sound is vibration. A vibration can be pressed into a soft surface as a wiggle. Drag a needle back along that wiggle and it vibrates again in the same pattern, and the air carries it to your ear.",
-          "Tinfoil was useless for anything but a demonstration. Wax cylinders through the 1880s and '90s made recordings durable enough to sell, and then something genuinely new entered human experience: you could hear a voice belonging to someone who was not there — including someone who had died. Families recorded relatives. Audiences heard singers who were nowhere in the building.",
+          "The principle was direct. Sound moves a diaphragm. The diaphragm moves a stylus. The stylus inscribes a changing path. During playback, following that path sets the system vibrating again.",
+          "Tinfoil demonstrated the idea but was too fragile and awkward for everyday use. During the 1880s, work by the Volta Laboratory and Edison helped establish wax cylinders as a more practical medium. Recorded voices and music could now be replayed, sold, collected, and heard far from the original performance.",
         ],
         hear: {
-          text: "Every artifact this app simulates — the hiss, the ticks, the softening of loud moments — exists because playback is mechanical contact, exactly as it was on Edison's cylinder.",
-          action: { label: "⇄ Hear the medium", target: "compare" },
+          text: "Early recordings sound narrow, noisy, and distant to modern ears. That noise is not one single “vinyl effect”; it reflects the materials, recording method, playback equipment, age, and condition of each object. Vinylize models a modern LP played on a worn setup — an interpretation, not a reproduction of any particular era.",
+          action: { label: "⇄ Hear the interpretation", target: "compare" },
         },
         explore: {
-          text: "Zoom in until a groove wall fills the screen. The wave cut into it is the same wave that went into the horn.",
-          action: { label: "◎ Zoom into the groove", target: "groove" },
+          text: "Zoom until a single groove wall fills the screen and watch how its shape follows the music. Vinylize renders discs only; it does not simulate a cylinder.",
+          action: { label: "◎ Zoom into the wall", target: "groove" },
         },
+        sources: [
+          {
+            label: "Library of Congress — History of the Cylinder Phonograph",
+            url: "https://www.loc.gov/collections/edison-company-motion-pictures-and-sound-recordings/articles-and-essays/history-of-edison-sound-recordings/history-of-the-cylinder-phonograph/",
+          },
+        ],
       },
       {
         key: "discs",
         kind: "chapter",
-        label: "Chapter 03",
+        label: "Chapter 3",
         glyph: "◍",
-        title: "From cylinders to discs",
-        subtitle: "The shape that made a record industry possible",
+        title: "From Cylinders to Discs",
+        subtitle: "The shape that helped recorded music become an industry",
         moment: [
-          "A cylinder had one commercial flaw that nearly strangled recorded music in its infancy: copying it was miserable. In the early years, producing a hundred cylinders could mean performing the song a hundred times, or singing into a bank of horns and hoping for the best.",
-          "Emile Berliner's answer, patented in 1887, looks obvious only in hindsight: make the record flat.",
+          "Early cylinders were difficult to reproduce in large numbers. Performers sometimes repeated a piece several times, or recorded into several machines at once, to create more originals.",
+          "Emile Berliner pursued a different shape: a flat disc.",
         ],
         whatChanged: [
-          "A flat disc can be stamped. Cut one master, grow a metal stamper from it, and press identical copies by the thousand, the way coins are struck. The recording stopped being the product — the master became the product, and copies became almost free.",
-          "Discs also stack on a shelf instead of rolling off it, survive shipping, and carry a flat circle in the middle to print on, which is where record “labels” got their name. Shellac — a resin secreted by the lac insect — became the material, and through the 1920s the industry converged on roughly 78 revolutions per minute, giving about three minutes a side.",
-          "That limit quietly rewrote songwriting. The length of a pop single is not an aesthetic law. It is the size of a piece of shellac, and we have been writing to it ever since.",
+          "Berliner patented his gramophone system in 1887 and soon replaced its experimental cylinder with a disc. Flat masters could be developed into stampers, making it easier to press many copies of the same recording. Discs were also convenient to stack, package, label, and distribute.",
+          "By the early twentieth century, discs were overtaking cylinders. Many commercial records used compounds in which shellac served as a binder alongside mineral fillers and other ingredients. Playback speeds varied at first, then settled around 78 rpm during the 1920s.",
+          "A typical ten-inch 78 held only a few minutes per side. That limit encouraged compact arrangements and helped reinforce the short song as a commercial unit — but it was one influence among many, not the sole reason popular songs have the lengths they do.",
         ],
-        explore: {
-          text: "Your record is a disc for Berliner's reason. The spiral turning in the 3D room is exactly the geometry that could be stamped out a thousand times from one master.",
-          action: { label: "◎ Look at the spiral", target: "groove" },
+        hear: {
+          text: "Vinylize models one format: a 33⅓ rpm microgroove LP. The coarser surface and narrower bandwidth of a shellac 78 belong to a different object, and this build does not attempt to reproduce them.",
         },
+        explore: {
+          text: "Pull back in the 3D room to see the whole side at once — a single continuous spiral running from the lead-in at the rim to the run-out near the label.",
+          action: { label: "◎ See the whole spiral", target: "groove" },
+        },
+        sources: [
+          {
+            label: "Library of Congress — Emile Berliner and the Gramophone",
+            url: "https://www.loc.gov/collections/emile-berliner/articles-and-essays/gramophone/",
+          },
+        ],
       },
     ],
   },
   {
-    label: "II · The record becomes culture",
+    label: "Act II — The Record Becomes Culture",
     chapters: [
       {
         key: "modern-vinyl",
         kind: "chapter",
-        label: "Chapter 04",
+        label: "Chapter 4",
         glyph: "33",
-        title: "The birth of modern vinyl",
-        subtitle: "Columbia, RCA, and a two-year war over how fast a record should spin",
+        title: "The Birth of the Modern LP",
+        subtitle: "Two new formats reshape the album and the single",
         moment: [
-          "In June 1948 Columbia held a press demonstration with two piles on a table. One was a stack of shellac 78s about eight inches high. The other was a short stack of new discs holding the same music.",
-          "The point landed without a word of explanation.",
+          "On June 21, 1948, Columbia Records introduced its long-playing record at a New York press conference. A twelve-inch disc spinning at 33⅓ rpm could hold roughly twenty-three minutes per side — several times the playing time of a conventional 78.",
+          "The extra space changed what a record could be.",
         ],
         whatChanged: [
-          "Columbia's engineers, led by Peter Goldmark, had changed three things at once: slow the disc to 33⅓ rpm, cut a far finer “microgroove” so turns sit closer together, and replace brittle shellac with vinyl, which is quieter, tougher and able to hold that finer detail. The result was around twenty-two minutes a side instead of three.",
-          "RCA Victor refused to adopt a rival's format and launched its own a year later: a seven-inch disc at 45 rpm with a wide centre hole and a fast automatic changer. For about two years the speeds fought, and buyers were stuck in the middle. The truce became a division of labour that lasted fifty years — the LP took the album, the 45 took the single, the 78 quietly died.",
-          "The artistic consequence outgrew the technical one. Before the LP, an “album” meant a literal book of paper sleeves holding several 78s. Afterwards a musician could make one continuous twenty-minute statement and expect it to be heard in order, as a whole.",
+          "The successful LP combined several earlier ideas: slower rotation, vinyl material, and a much finer microgroove. Peter Goldmark oversaw the Columbia project, with Bill Bachman and a larger engineering team playing important roles in bringing the system to market.",
+          "RCA Victor answered in 1949 with the seven-inch 45 rpm record and an automatic changer. Consumers briefly faced three competing speeds: 78, 33⅓, and 45. The newer formats eventually found different strengths. LPs became closely associated with albums and longer works, while 45s became central to singles, jukeboxes, radio promotion, and pop culture.",
+          "The word “album” had previously described a bound collection of 78s in paper sleeves. With the LP, an album increasingly became a continuous, sequenced work on one disc.",
         ],
         explore: {
-          text: "The record on your platter is cut in exactly this format — 33⅓ rpm, a quarter-millimetre of groove pitch — and the 3D room is turning at that speed right now.",
-          action: { label: "◎ See your microgroove", target: "groove" },
+          text: "Your upload is cut in this format: 33⅓ rpm, a 0.25 mm groove pitch, laid into a twelve-inch disc at true radius. Vinylize does not currently offer 78 or 45 rpm playback, so the speed comparison stays a matter of description rather than demonstration.",
+          action: { label: "◎ Inspect your microgroove", target: "groove" },
         },
+        sources: [
+          {
+            label: "Library of Congress — The First Long-Playing Disc",
+            url: "https://blogs.loc.gov/now-see-hear/2019/04/inside-the-archival-box-the-first-long-playing-disc/",
+          },
+        ],
       },
       {
         key: "golden-age",
         kind: "chapter",
-        label: "Chapter 05",
+        label: "Chapter 5",
         glyph: "❏",
-        title: "The golden age of the record",
-        subtitle: "When a storage medium became an identity",
+        title: "The Golden Age of the Record",
+        subtitle: "When a storage format became an identity",
         moment: [
-          "A record shop in 1965 has listening booths along one wall. You pull something off the rack, hand it over, step into the booth, and the shop plays it for you while you stand there deciding. Nobody has heard this album at home yet. This is how you find out.",
-          "Down the street a jukebox holds a hundred 45s and a generation's worth of arguments about which button to press.",
+          "Enter a mid-century record shop. Sleeves fill the racks. A listening booth offers a first encounter with an unfamiliar album. Nearby, a jukebox turns a row of 45s into a public argument about what everyone should hear next.",
+          "Finding music is becoming a social ritual.",
         ],
         whatChanged: [
-          "Vinyl stopped being merely a way to store sound and became an object with a culture around it. A twelve-inch sleeve is a foot square, held in both hands for twenty minutes at a time — effectively a small gallery in every home. Cover art became a career. Gatefolds opened into murals. Liner notes told you who played what, and where.",
-          "Records were how taste became visible. You could read a shelf of them and learn something about a person. They were lent, argued over, taped for friends, carried to parties, queued at the school disco.",
-          "There is even a private tradition hidden on the disc itself: in the blank “dead wax” between the last groove and the label, mastering engineers scratched initials and jokes by hand. Tilt an old record to the light and you may find a message from someone in a cutting room fifty years ago.",
+          "The twelve-inch sleeve gave music a large visual surface. Cover art, photography, typography, liner notes, and gatefold designs became part of the work. A record could tell you who performed, who produced, where it was recorded, and how the artist wanted the music to be seen.",
+          "Collections made taste visible. Records were saved for, borrowed, traded, carried to parties, and played for friends. Record shops, radio stations, fan communities, jukeboxes, and clubs all became places where music and identity met.",
+          "The object also carried less visible evidence of its manufacture. In the run-out area — often called the dead wax — engineers and pressing plants inscribed matrix numbers and other markings. Some records also contain initials, messages, or jokes left by the people who cut them.",
         ],
         explore: {
-          text: "The label spinning in the 3D room carries your uploaded track's name — the same twelve-inch canvas, minus the cardboard.",
-          action: { label: "◎ Read your label", target: "groove" },
+          text: "Orbit the record to see its label, which carries your uploaded file's name, and the wide run-out spiral near the centre. Vinylize renders the disc, label and run-out; it does not render a sleeve or inscribe matrix markings.",
+          action: { label: "◎ Look at the label", target: "groove" },
         },
       },
     ],
   },
   {
-    label: "III · Inside the object",
+    label: "Act III — Inside the Object",
     chapters: [
       {
         key: "inside-groove",
         kind: "chapter",
-        label: "Chapter 06",
+        label: "Chapter 6",
         glyph: "⌇",
-        title: "Inside the groove",
-        subtitle: "How a scratch in plastic becomes a band playing in your room",
+        title: "Inside the Groove",
+        subtitle: "How movement in plastic becomes music in a room",
         moment: [
-          "Stop the timeline for a moment and look at what is physically happening. Under magnification, a record's surface is a single spiral canyon roughly a twentieth of a millimetre across, running unbroken for something like half a kilometre.",
-          "The walls of that canyon are not smooth. They wave.",
+          "Pause the timeline and move closer. A record side contains one continuous spiral, often extending for hundreds of metres if it could be uncoiled. The groove does not have one fixed width or spacing: its shape and pitch change with the program, level, duration, and decisions made during cutting.",
+          "Its walls move.",
         ],
         whatChanged: [
-          "Cutting: a lathe drives a heated stylus across a lacquer disc while the music pushes it sideways. Loud means wider swings; high notes mean tighter wiggles. The shape in the wall is a physical drawing of sound pressure over time.",
-          "Playing: a diamond tip rides in that groove and is shaken by the walls. The tip sits on a thin cantilever with a magnet at the other end, suspended inside a coil — as the magnet moves, it induces a tiny voltage. A phono preamp lifts that whisper to usable level, an amplifier drives it harder, and a speaker cone converts it back into moving air.",
-          "Stereo hides in the same trench through geometry: cut the groove as a V and treat each wall, angled at 45 degrees, as its own channel. Motion shared by both walls is the mono sum, which is why stereo records still played correctly on mono equipment and nobody had to throw anything away.",
-          "The failure modes follow from the same picture. Dust in the groove deflects the tip — a tick. A scratch across the walls — a pop, or a skip if the tip is thrown clean out of its lane. And because the whole system works by friction, every play removes a little of what it is reading.",
+          "During mastering, a cutting head converts an electrical audio signal into motion and inscribes a modulated spiral into a master surface. That master is processed through several stages to create the metal stampers used to press finished records.",
+          "During playback, a stylus follows the groove and moves a cantilever inside the cartridge. Different cartridge designs turn that motion into a small electrical signal in different ways. A phono preamplifier applies the required equalization and raises the signal; an amplifier and loudspeaker then turn it back into moving air.",
+          "Stereo records use two groove walls angled at 45 degrees to carry combinations of the left and right channels. The stylus therefore moves both sideways and vertically as it follows the music.",
+          "The physical system also explains many familiar problems. Dust or damage can produce clicks. A scratch may repeat once per revolution. Severe damage or poor setup can throw the stylus into another part of the groove, causing a skip. Contact playback can gradually wear both record and stylus, especially when equipment is misadjusted or surfaces are dirty.",
         ],
         hear: {
-          text: "The clicks in the vinyl version are not sprinkled at random. They are scattered along the groove's physical length, so how often you hear one depends on how fast the disc is passing the needle.",
+          text: "Vinylize scatters its dust and defects along the groove's physical length rather than evenly in time, then maps them back through the spiral — so how often you hear a tick depends on how fast the disc is passing the stylus. Repeating scratches, warps and skips are not modelled in this build.",
           action: { label: "⇄ Listen for the ticks", target: "compare" },
         },
         explore: {
-          text: "Zoom all the way into the microscope view. The V-shaped trench there is built from your own audio at true scale, with the stylus resting in it.",
+          text: "Zoom to the magnified view. The V-shaped trench is generated from your own audio's groove signal at true pitch and radius, with the stylus resting in it. The audio modulation itself is magnified for visibility, and the on-screen label states the factor.",
           action: { label: "◎ Enter the microscope", target: "groove" },
         },
+        sources: [
+          { label: "Ortofon — mono and stereo groove geometry", url: "https://ortofon.com/pages/what-is-mono" },
+          { label: "Ortofon — how a moving-magnet cartridge works", url: "https://ortofon.com/pages/what-is-moving-magnet" },
+        ],
       },
       {
         key: "why-sounds",
         kind: "chapter",
-        label: "Chapter 07",
+        label: "Chapter 7",
         glyph: "≈",
-        title: "Why vinyl sounds like vinyl",
-        subtitle: "Taking the word “warm” seriously",
+        title: "Why Vinyl Sounds Like Vinyl",
+        subtitle: "There is no single “vinyl sound”",
         moment: [
-          "Ask why someone prefers records and the word that comes back is almost always “warm”. It is a strange thing to call a mechanical process, and it deserves to be taken seriously rather than waved away as nostalgia.",
+          "Ask listeners why they enjoy records and one word appears often: warm. It can describe a genuine listening experience, but it is not one measurable property shared by every record.",
+          "The record, the mastering choices, the turntable, the cartridge, the phono stage, the speakers, the room, and the listener all take part.",
         ],
         whatChanged: [
-          "Part of the answer is genuinely physical. Cutting to vinyl imposes limits: bass has to be controlled or the groove collides with its neighbour; treble gets gentler as the needle spirals inward and the groove passes it more slowly; loud passages are rounded off slightly by the mechanical give of the cutting chain and the stylus suspension. Records also tend to be mastered less aggressively than their streaming counterparts, because the format refuses to be squashed as hard.",
-          "Add the medium's own voice — a low surface hiss, the occasional tick — and you get a sound with both a floor and a ceiling. Nothing is ever perfectly silent, and nothing is ever savagely loud.",
-          "The other part of the answer is not technical at all. You chose the record, took it out of its sleeve, and started it on purpose. Skipping is inconvenient. Twenty minutes later you are still there. Attention is not an audio specification, but it changes what you hear.",
+          "Vinyl has physical constraints. Very deep or out-of-phase bass can require adjustment because it demands large or difficult groove movement. High-frequency and highly sibilant material can be challenging to track cleanly. As the stylus moves inward, the groove travels past it at a lower linear speed, increasing the risk of inner-groove distortion.",
+          "Records also use standardized equalization. During cutting, low frequencies are reduced and high frequencies are boosted; the phono preamp applies the complementary curve during playback. This makes grooves more practical and helps reduce audible surface noise.",
+          "Surface noise, small speed variations, distortion, and the coloration of the playback chain can all contribute to what a listener calls warmth. So can mastering: a vinyl release and a streaming release may use different masters. Neither format guarantees more or less dynamic range simply by existing.",
+          "Then there is attention. Choosing a record, placing it on the platter, and listening through a side can change how someone engages with the music. That is a real part of the experience, even though it is not an audio specification.",
         ],
         hear: {
-          text: "This is the app's main event. Flip between Original and Vinyl while a track plays: nothing in that difference is an EQ preset, and everything in it comes from simulating the mechanics of the previous chapter.",
-          action: { label: "⇄ Switch between the two", target: "compare" },
+          text: "Switch between the original and the Vinylize treatment. The differences come from modelled processes — RIAA equalization, stylus tracing loss, groove-wall saturation, wow and flutter, dust, surface noise and channel crosstalk — applied together at deliberately exaggerated amounts so they stay audible on laptop speakers.",
+          action: { label: "⇄ Compare the two", target: "compare" },
+        },
+        explore: {
+          text: "This build applies those effects as one combined treatment and does not expose per-effect switches, so treat the comparison as the sum of them rather than a demonstration of any single characteristic.",
         },
       },
     ],
   },
   {
-    label: "IV · Reinvention and decline",
+    label: "Act IV — Reinvention and Displacement",
     chapters: [
       {
         key: "changes-music",
         kind: "chapter",
-        label: "Chapter 08",
+        label: "Chapter 8",
         glyph: "⟲",
-        title: "Vinyl changes music again",
-        subtitle: "The moment the record stopped being a recording and became an instrument",
+        title: "When the Record Became an Instrument",
+        subtitle: "Playback turns into performance",
         moment: [
-          "The Bronx, 1973. At a back-to-school party, DJ Kool Herc notices that the dancers come alive during one short instrumental break in a funk record. So he buys a second copy of the same record, cues both turntables, and cuts between them — stretching a five-second break into five minutes.",
-          "The dancers who thrived in that gap got a name: break-boys.",
+          "At a back-to-school party in the Bronx in 1973, DJ Kool Herc used two turntables to extend the instrumental breaks that energized the dancers. The event is widely commemorated as a foundational moment in hip-hop — not the creation of a culture from nothing, but a moment when existing Black, Latino, Caribbean, sound-system, dance, and spoken-word traditions came together in a powerful new form.",
+          "The record was no longer only something to hear. It was something to perform.",
         ],
         whatChanged: [
-          "The technique spread and deepened fast. Grandmaster Flash worked out how to cue a record by ear and drop it precisely on the beat. Grand Wizzard Theodore, still a teenager, discovered that dragging a record back and forth under the needle made a sound worth keeping — the scratch.",
-          "This inverted the entire idea of a record. For eighty years the goal had been faithful reproduction: a record was a performance to be replayed without alteration. Now it was raw material, and the turntable was something you played with your hands.",
-          "Everything downstream follows — sampling, hip-hop production, remix culture, house and techno assembled live from other people's records, and crate digging: the practice of listening through thousands of forgotten albums hunting for four seconds worth taking.",
+          "Grandmaster Flash refined precise cueing and mixing techniques. Grand Wizzard Theodore is credited as the primary innovator of scratching, moving a record rhythmically beneath the stylus. DJs transformed turntables, mixers, and existing recordings into a new instrument.",
+          "That change reached far beyond one technique. Turntablism, sampling, hip-hop production, disco, house, techno, remix culture, and crate digging all developed distinct relationships with recorded sound. Their histories are not identical, but each demonstrates that a recording can become material for another creative act.",
         ],
         explore: {
-          text: "Click anywhere on the groove in the 3D room to drop the needle at that moment. It is a crude descendant of cueing a record by hand.",
-          action: { label: "◎ Drop the needle yourself", target: "groove" },
+          text: "Click anywhere on the groove to move the stylus to that point in the track. It is a seek control built on the spiral's geometry — useful for inspection, but nothing like the precision of a DJ cueing by hand. Vinylize has no looping, backspin or scratching.",
+          action: { label: "◎ Move the stylus", target: "groove" },
         },
+        sources: [
+          {
+            label: "Library of Congress — Kool Herc and the 1973 back-to-school jam",
+            url: "https://blogs.loc.gov/loc/2021/01/citizen-dj-noah-webster-and-the-value-of-copyright/",
+          },
+          {
+            label: "Smithsonian — Grand Wizzard Theodore's turntables",
+            url: "https://music.si.edu/story/grand-wizzard-theodores-turntables-smithsonian-year-music-object-day-august-13",
+          },
+        ],
       },
       {
         key: "digital",
         kind: "chapter",
-        label: "Chapter 09",
+        label: "Chapter 9",
         glyph: "◇",
-        title: "The rise of digital",
-        subtitle: "Convenience quietly replaces ritual",
+        title: "The Rise of Digital",
+        subtitle: "Convenience changes the centre of listening",
         moment: [
-          "By the early 1980s the argument looked finished. The compact disc arrived in 1982 promising precisely what vinyl could not: no surface noise, no wear from playing, no skipping, no side to flip. Early advertising reached for the phrase “perfect sound forever”.",
+          "Vinyl was not replaced in a single step. The compact cassette, introduced by Philips in 1963, made recording and portability easier. Sony's Walkman, launched in 1979, made private listening part of everyday movement.",
+          "Then came the compact disc.",
         ],
         whatChanged: [
-          "Convenience had already been chipping away for years. Philips' compact cassette (1963) made music portable and, with the Walkman in 1979, personal — and handed a generation the mixtape. The CD then removed the last excuses: within about six years it outsold the LP, and by the early nineties the major labels had wound vinyl production down to almost nothing. Pressing plants closed and their machines were scrapped or shipped abroad.",
-          "Then compression went further than anyone expected. MP3 shrank an album small enough to cross a phone line, file sharing detached music from any object at all, and streaming completed the journey: every song ever recorded, instantly, for a monthly fee.",
-          "Each step traded ritual for access. Nothing about a streaming library asks you to choose, wait, get up, or turn anything over. That is its enormous advantage — and, as it turned out, exactly what the revival would be about.",
+          "Sony and Philips jointly developed the CD system, and the first commercial players and discs arrived in 1982. Because a laser reads the disc without riding in an audio groove, normal playback does not gradually wear the recording surface. CDs offered low background noise, quick track access, long playing time, and a smaller package. They could still be scratched or skip, but they removed many of vinyl's everyday inconveniences.",
+          "By the late 1980s, CDs had overtaken LPs in major markets. Vinyl became a specialist format; pressing plants closed, and many stores reduced or removed their record sections.",
+          "MP3 compression then made audio files small enough for practical online exchange. Downloads and file sharing separated the recording from a physical carrier, while streaming made vast catalogues available on demand.",
+          "Each format changed the balance between access, ownership, portability, and ritual. Digital listening did not destroy attention, and physical listening does not guarantee it — but the tools encourage different habits.",
+        ],
+        hear: {
+          text: "Compare the modelled surface noise and speed variation against the clean original. Keep in mind that when two real releases sound different, the cause is often a mastering decision rather than the storage format itself.",
+          action: { label: "⇄ Compare clean and coloured", target: "compare" },
+        },
+        sources: [
+          {
+            label: "Sony — joint development and 1982 launch of the compact disc",
+            url: "https://www.sony.com/en/SonyInfo/CorporateInfo/History/SonyHistory/2-07.html",
+          },
         ],
       },
     ],
   },
   {
-    label: "V · The return",
+    label: "Act V — The Return",
     chapters: [
       {
         key: "refused",
         kind: "chapter",
         label: "Chapter 10",
         glyph: "↻",
-        title: "The record that refused to die",
-        subtitle: "Why an obsolete object came back on purpose",
+        title: "The Record That Refused to Disappear",
+        subtitle: "Why an old format found new listeners",
         moment: [
-          "The format never entirely died, mostly because DJs would not allow it. All through the CD's dominance, dance and hip-hop kept buying records, and a stubborn network of independent shops kept selling them.",
-          "In 2008 a handful of those shops invented Record Store Day, largely to get people through the door. It landed in the middle of something larger: sales of new vinyl had quietly begun climbing, and they kept climbing for well over a decade.",
+          "Vinyl never vanished completely. DJs, collectors, audiophiles, independent labels, punk and dance scenes, specialist shops, and committed pressing plants kept the format alive during the CD era.",
+          "The movement now known as Record Store Day began in 2007, with its first main event held in 2008. It gave independent shops a shared celebration just as vinyl sales were beginning a long climb.",
         ],
         whatChanged: [
-          "In the United States, vinyl revenue passed CDs in 2020 for the first time since 1986, and overtook them in units sold shortly afterwards. Plants that had been idle for twenty years reopened, new ones were built, and waiting times for pressing runs stretched into months.",
-          "The reasons buyers give are rarely about fidelity. They talk about the sleeve, about owning rather than renting, about a side of music being a decision instead of an endless feed. A record asks you to commit roughly twenty minutes of attention, and that requirement turned out to be a feature.",
-          "It is not a frictionless happy ending. Records are petrochemical objects — PVC pressed with steam and shipped heavy — and the industry is still working through recycled compounds, greener plants and long queues. Choosing vinyl means choosing something costly in more than money.",
+          "In the United States, vinyl revenue surpassed CD revenue in 2020 for the first time since 1986. In 2022, vinyl albums also surpassed CDs in units for the first time since 1987. Those are U.S. industry measurements, not universal claims about every country, but they show that the revival became commercially significant.",
+          "Listeners returned for different reasons: artwork, collecting, ownership, sound, nostalgia, artist support, and the ritual of choosing one side at a time. New plants opened and old equipment returned to service.",
+          "The revival also has costs. Records are commonly made from PVC; pressing, electroplating, packaging, and shipping all use materials and energy. Recycled compounds, lower-impact packaging, and cleaner manufacturing may reduce some burdens, but “physical” does not automatically mean sustainable.",
         ],
         explore: {
-          text: "Look at the wide, nearly empty spiral just outside the label in the 3D room. On a pressed record that run-out is where the cutting engineer's signature would be scratched by hand.",
-          action: { label: "◎ Find the run-out", target: "groove" },
+          text: "Inspect the run-out area and label in the 3D room, then weigh that object against what Vinylize actually is — a digital interpretation of the ritual, with none of the material cost and none of the physical presence.",
+          action: { label: "◎ Inspect the run-out", target: "groove" },
         },
+        sources: [
+          {
+            label: "RIAA — 2020 year-end revenue report",
+            url: "https://www.riaa.com/wp-content/uploads/2021/02/2020-Year-End-Music-Industry-Revenue-Report.pdf",
+          },
+          {
+            label: "RIAA — 2022 year-end revenue report",
+            url: "https://www.riaa.com/wp-content/uploads/2023/03/2022-Year-End-Music-Industry-Revenue-Report.pdf",
+          },
+          {
+            label: "European Commission — publication on PVC and the environment",
+            url: "https://op.europa.eu/en/publication-detail/-/publication/e9e7684a-906b-11ec-b4e4-01aa75ed71a1",
+          },
+        ],
       },
     ],
   },
   {
-    label: "Closing",
+    label: "Epilogue",
     chapters: [
       {
         key: "epilogue",
         kind: "epilogue",
         label: "Epilogue",
         glyph: "●",
-        title: "Bringing the ritual into the digital world",
-        subtitle: "What this app is actually for",
+        title: "Bringing the Ritual Into the Digital World",
+        subtitle: "A simulated effect is inspired by a physical process, not identical to one",
         moment: [
-          "Back in the room. The platter is turning, the arm is tracking slowly inward, and under the needle your own song is being read out of a groove that does not physically exist.",
+          "Back in the room, the platter turns and the arm moves inward. The song is digital, but the scene asks you to slow down and notice it.",
         ],
         whatChanged: [
-          "Digital gave us access: everything, everywhere, immediately, and that is a genuine good that no amount of nostalgia should talk anyone out of. Vinyl offered close to the opposite — one album, one side, one room, and an object you had to handle. They are not competing answers to the same question.",
-          "What Vinylize does is borrow the physics and hand it back as an experience. Your music is cut into a spiral, read by a simulated diamond, given all the imperfection that implies — and then placed beside the pristine original so you can switch between them and hear exactly what the object costs, and what it adds.",
+          "Digital listening gave us extraordinary access: enormous catalogues, immediate playback, portability, and powerful tools for discovery. Vinyl offers a different set of qualities: a physical object, visible artwork, mechanical playback, finite sides, and a deliberate sequence of actions.",
+          "Vinylize does not need to pretend that one is superior to the other. Its opportunity is to bring selected elements of the vinyl experience into a digital space: visible motion, intentional listening, historical context, and a controllable layer of vinyl-inspired sound.",
+          "The comparison should remain honest. A simulated effect is inspired by a physical process; it is not the same as pressing a record. This build lets you hear the treatment as a whole and see the groove it came from — and separating the individual elements, so curiosity can replace nostalgia, is still work left to do.",
         ],
         hear: {
-          text: "Flip between Original and Vinyl one last time, now knowing that everything you hear change is a hundred and fifty years of engineering and a needle in a groove.",
-          action: { label: "⇄ One more listen", target: "compare" },
+          text: "Switch between the original and the Vinylize treatment one final time. This time, listen for the individual elements by name and decide what each one contributes.",
+          action: { label: "⇄ One final comparison", target: "compare" },
         },
-        question: "If every song ever recorded is one tap away, what makes us stop and truly listen?",
+        question: "If every song is one tap away, what makes us stop and truly listen?",
       },
     ],
   },
