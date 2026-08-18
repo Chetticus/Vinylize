@@ -21,6 +21,10 @@ function Placeholder() {
         <b>No record on the platter.</b>
         <br />
         Upload a song (or press “Try the demo groove”) to cut your first disc.
+        <br />
+        <span style={{ fontSize: 12.5 }}>
+          Nothing to play yet? <b>The Vinyl Story</b> is readable right now.
+        </span>
       </div>
     </div>
   );
@@ -40,7 +44,9 @@ export default function App() {
               key={key}
               className={activeTab === key ? "active" : ""}
               onClick={() => setTab(key)}
-              disabled={!ready && key !== "waveform"}
+              // The Vinyl Story is reading material, not a readout: it needs
+              // no upload and stays available on an empty platter.
+              disabled={!ready && key !== "waveform" && key !== "explorer"}
             >
               {label}
             </button>
@@ -48,14 +54,15 @@ export default function App() {
         </nav>
 
         <div className={`tab-content${activeTab === "groove" ? " no-scroll" : ""}`}>
-          {!ready ? (
+          {activeTab === "explorer" ? (
+            <ExplorerTab />
+          ) : !ready ? (
             <Placeholder />
           ) : (
             <>
               {activeTab === "waveform" && <WaveformTab />}
               {activeTab === "groove" && <GrooveTab />}
               {activeTab === "compare" && <CompareTab />}
-              {activeTab === "explorer" && <ExplorerTab />}
             </>
           )}
         </div>
