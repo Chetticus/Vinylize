@@ -3,7 +3,7 @@
  *
  * The left rail is the pipeline itself: seven stages grouped into the three
  * physical phases (cutting the lacquer, the groove medium, playback), in
- * processing order, with live active/bypassed state from the DSP controls.
+ * processing order.
  * Selecting a stage fills the reading pane; sidebar concept links deep-link
  * here via store.explorerFocus.
  */
@@ -91,8 +91,7 @@ export default function ExplorerTab() {
           </div>
         ))}
         <p className="rail-footnote">
-          Stages marked <em>bypassed</em> are switched off in DSP Controls — their card explains
-          what you're <em>not</em> hearing.
+          Every stage is one physical mechanism the simulation reproduces on your own audio.
         </p>
       </nav>
 
@@ -134,9 +133,6 @@ export default function ExplorerTab() {
         )}
 
         <footer className="stage-actions">
-          <button className="btn small" onClick={() => setTab("controls")}>
-            ⚙ Experiment with this stage in DSP Controls
-          </button>
           <button className="btn small" onClick={() => setTab("compare")}>
             ⇄ Hear it in Compare
           </button>

@@ -57,9 +57,9 @@ export default function CompareTab() {
             saturation "warmth".
           </li>
           <li>
-            Then open <b>DSP Controls</b> and switch stages off one at a time to isolate each
-            effect — or drag the groove position inward and hear the same file degrade near the
-            label.
+            The vinyl side is not an EQ preset: it is the sum of a stylus tracing a spiral
+            groove, an imperfect turntable, and the record's own surface. The <b>3D Groove</b>
+            tab shows the same groove the simulation just read.
           </li>
         </ul>
       </div>

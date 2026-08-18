@@ -486,50 +486,6 @@ canvas.waveform { width: 100%; height: 130px; display: block; border-radius: 6px
   .stage-rail { position: static; }
 }
 
-/* ---------------------------------------------------------- controls --- */
-
-.control-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 0;
-  border-bottom: 1px solid var(--border);
-}
-.control-row:last-child { border-bottom: none; }
-.control-row .label { flex: 0 0 220px; font-size: 13px; }
-.control-row .label .hint { display: block; color: var(--text-dim); font-size: 11.5px; }
-.control-row input[type="range"] { flex: 1; accent-color: var(--accent); }
-.control-row .value {
-  flex: 0 0 72px;
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-  font-size: 12.5px;
-  color: var(--text-dim);
-}
-
-.toggle {
-  position: relative;
-  width: 38px; height: 21px;
-  flex: 0 0 38px;
-  appearance: none;
-  background: var(--bg-inset);
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  cursor: pointer;
-  transition: background 0.15s;
-}
-.toggle:checked { background: var(--accent-dim); border-color: var(--accent-dim); }
-.toggle::after {
-  content: "";
-  position: absolute;
-  top: 2px; left: 2px;
-  width: 15px; height: 15px;
-  border-radius: 50%;
-  background: var(--text);
-  transition: transform 0.15s;
-}
-.toggle:checked::after { transform: translateX(17px); }
-
 /* ------------------------------------------------------------ groove --- */
 
 .groove-wrap { flex: 1; position: relative; min-height: 0; border-radius: var(--radius); overflow: hidden; border: 1px solid var(--border); }

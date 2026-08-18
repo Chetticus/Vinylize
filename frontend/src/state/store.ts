@@ -22,7 +22,7 @@ import {
   type ProcessResponse,
 } from "../types/api";
 
-export type TabKey = "waveform" | "groove" | "compare" | "explorer" | "controls";
+export type TabKey = "waveform" | "groove" | "compare" | "explorer";
 
 export const engine = new PlaybackEngine();
 
@@ -58,8 +58,6 @@ interface SessionState {
   upload: (file: File) => Promise<void>;
   useDemo: () => Promise<void>;
   selectSession: (sessionId: string) => Promise<void>;
-  setConfig: (patch: Partial<ProcessConfig>) => void;
-  reprocess: () => Promise<void>;
   setTab: (tab: TabKey) => void;
   /** Jump to the Explorer with a specific stage card selected. */
   openExplorerCard: (key: string) => void;
@@ -232,8 +230,6 @@ export const useStore = create<SessionState>((set, get) => {
       }
     },
 
-    setConfig: (patch) => set((s) => ({ config: { ...s.config, ...patch } })),
-    reprocess: () => runProcess(),
     setTab: (tab) => set({ activeTab: tab }),
     openExplorerCard: (key) => set({ activeTab: "explorer", explorerFocus: key }),
     clearExplorerFocus: () => set({ explorerFocus: null }),

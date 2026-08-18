@@ -30,6 +30,6 @@ src/
                        (analytic circle-intersection IK), recordMotion (clock/phase/
                        contact), grooveMath (true-scale spiral math), CafeEnvironment,
                        labelTexture (procedural canvas textures)
-    tabs/              Waveform · 3D Groove · Compare · Explorer · DSP Controls
+    tabs/              Waveform · 3D Groove · Compare · Explorer
   types/api.ts         mirrors backend Pydantic schemas
 ```

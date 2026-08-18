@@ -1,7 +1,6 @@
 import Sidebar from "./components/Sidebar";
 import Transport from "./components/Transport";
 import CompareTab from "./components/tabs/CompareTab";
-import ControlsTab from "./components/tabs/ControlsTab";
 import ExplorerTab from "./components/tabs/ExplorerTab";
 import GrooveTab from "./components/tabs/GrooveTab";
 import WaveformTab from "./components/tabs/WaveformTab";
@@ -12,7 +11,6 @@ const TABS: Array<[TabKey, string]> = [
   ["groove", "3D Groove"],
   ["compare", "Compare"],
   ["explorer", "Engineering Explorer"],
-  ["controls", "DSP Controls"],
 ];
 
 function Placeholder() {
@@ -58,7 +56,6 @@ export default function App() {
               {activeTab === "groove" && <GrooveTab />}
               {activeTab === "compare" && <CompareTab />}
               {activeTab === "explorer" && <ExplorerTab />}
-              {activeTab === "controls" && <ControlsTab />}
             </>
           )}
         </div>
