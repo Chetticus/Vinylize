@@ -2,15 +2,17 @@ import { useRef, useState } from "react";
 
 import { useStore } from "../state/store";
 
+/** Sidebar jump-points into The Vinyl Story (keys match content/vinylStory). */
 const CONCEPTS: Array<[string, string]> = [
-  ["The first recorded voice", "edison"],
-  ["Why discs beat cylinders", "berliner"],
-  ["Why songs are 3 minutes long", "shellac"],
-  ["The album is invented", "lp"],
-  ["Two channels, one groove", "stereo"],
-  ["Secrets in the dead wax", "sleeve"],
-  ["Hip-hop saves the format", "turntablism"],
-  ["The comeback", "revival"],
+  ["Start here — the needle drops", "prologue"],
+  ["When music couldn't be kept", "before"],
+  ["The first recorded voice", "first-sounds"],
+  ["Why discs beat cylinders", "discs"],
+  ["The album is invented", "modern-vinyl"],
+  ["Inside the groove", "inside-groove"],
+  ["Why vinyl sounds like vinyl", "why-sounds"],
+  ["Hip-hop reinvents the record", "changes-music"],
+  ["The comeback", "refused"],
 ];
 
 export default function Sidebar() {

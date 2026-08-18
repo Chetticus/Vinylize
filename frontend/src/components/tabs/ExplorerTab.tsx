@@ -1,23 +1,71 @@
 /**
- * The Vinyl Story — a short illustrated history of the record.
+ * The Story of Vinyl — a guided history, readable with nothing on the platter.
  *
- * Master-detail: the left rail is a timeline grouped into three eras, the
- * right pane is the chapter as a piece of writing. Content lives in
- * content/vinylStory.ts; sidebar links deep-link to a chapter through
- * store.explorerFocus.
+ * Layout: a left rail acting as the journey's table of contents (acts, each
+ * holding a prologue / chapters / epilogue), and a reading pane that lays
+ * every section out in the same four-beat rhythm:
  *
- * This tab used to explain the DSP pipeline stage by stage. It now tells the
- * history instead — the physics is something the app should let you *hear*,
- * not something a visitor should have to read a manual about.
+ *   1. The moment        — a human scene, set in larger type
+ *   2. What changed      — the historical idea
+ *   3. Hear the difference — an audio demonstration
+ *   4. Explore the object  — an interaction in the 3D room
+ *
+ * The last two beats carry actions into the app. When no record is loaded
+ * those actions become a single "cut the demo record" button instead of a
+ * dead link, so the story works as an entry point rather than a reward for
+ * having already uploaded something.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { useStore } from "../../state/store";
-import { ALL_CHAPTERS, VINYL_STORY } from "../../content/vinylStory";
+import {
+  ALL_CHAPTERS,
+  VINYL_STORY,
+  actOf,
+  type StoryBeat,
+} from "../../content/vinylStory";
+
+/** One beat's optional call to action, degraded gracefully with no record. */
+function BeatAction({ beat }: { beat: StoryBeat }) {
+  const { analysis, processResult, loading, setTab, useDemo } = useStore();
+  const ready = analysis !== null && processResult !== null;
+
+  if (!beat.action) return null;
+  if (!ready) {
+    return (
+      <button className="btn small" disabled={loading !== null} onClick={() => void useDemo()}>
+        ▶ Cut the demo record to try this
+      </button>
+    );
+  }
+  return (
+    <button className="btn small" onClick={() => setTab(beat.action!.target)}>
+      {beat.action.label}
+    </button>
+  );
+}
+
+function Beat({
+  kicker,
+  beat,
+  variant,
+}: {
+  kicker: string;
+  beat: StoryBeat;
+  variant: "hear" | "explore";
+}) {
+  return (
+    <section className={`story-beat beat-${variant}`}>
+      <h4>{kicker}</h4>
+      <p>{beat.text}</p>
+      <BeatAction beat={beat} />
+    </section>
+  );
+}
 
 export default function ExplorerTab() {
-  const { explorerFocus, clearExplorerFocus, setTab } = useStore();
+  const { explorerFocus, clearExplorerFocus } = useStore();
   const [selectedKey, setSelectedKey] = useState(ALL_CHAPTERS[0].key);
 
   // Sidebar deep links: honour the requested chapter, then clear the request.
@@ -28,89 +76,112 @@ export default function ExplorerTab() {
     }
   }, [explorerFocus, clearExplorerFocus]);
 
-  const selected = ALL_CHAPTERS.find((c) => c.key === selectedKey) ?? ALL_CHAPTERS[0];
-  const index = ALL_CHAPTERS.findIndex((c) => c.key === selected.key);
-  const era = VINYL_STORY.find((e) => e.chapters.some((c) => c.key === selected.key));
-  const next = ALL_CHAPTERS[index + 1];
+  const { selected, index } = useMemo(() => {
+    const i = Math.max(
+      0,
+      ALL_CHAPTERS.findIndex((c) => c.key === selectedKey),
+    );
+    return { selected: ALL_CHAPTERS[i], index: i };
+  }, [selectedKey]);
+
+  const prev = index > 0 ? ALL_CHAPTERS[index - 1] : null;
+  const next = index < ALL_CHAPTERS.length - 1 ? ALL_CHAPTERS[index + 1] : null;
+  const progress = ((index + 1) / ALL_CHAPTERS.length) * 100;
+
+  const goto = (key: string) => {
+    setSelectedKey(key);
+    document.querySelector(".story-read")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
 
   return (
-    <div className="explorer-layout">
-      {/* ------------------------------ timeline ------------------------------ */}
-      <nav className="stage-rail" aria-label="Vinyl history timeline">
-        <div className="rail-title">A short history</div>
-        {VINYL_STORY.map((eraGroup) => (
-          <div className="rail-phase" key={eraGroup.label}>
-            <div className="rail-phase-label">{eraGroup.label}</div>
-            {eraGroup.chapters.map((chapter) => (
+    <div className="story-layout">
+      {/* ------------------------ journey / contents ------------------------ */}
+      <nav className="story-rail" aria-label="Story contents">
+        <div className="rail-title">The story of vinyl</div>
+        <p className="story-thesis">
+          Humans found a way to turn invisible sound into a physical object — and that object
+          changed how we experience music.
+        </p>
+        {VINYL_STORY.map((act) => (
+          <div className="rail-phase" key={act.label}>
+            <div className="rail-phase-label">{act.label}</div>
+            {act.chapters.map((chapter) => (
               <button
                 key={chapter.key}
                 className={`rail-stage${chapter.key === selected.key ? " active" : ""}`}
-                onClick={() => setSelectedKey(chapter.key)}
+                onClick={() => goto(chapter.key)}
               >
                 <span className="rail-glyph" aria-hidden>
                   {chapter.glyph}
                 </span>
                 <span className="rail-text">
                   <span className="rail-name">{chapter.title}</span>
-                  <span className="rail-sub">{chapter.year}</span>
+                  <span className="rail-sub">{chapter.label}</span>
                 </span>
               </button>
             ))}
           </div>
         ))}
-        <p className="rail-footnote">
-          Roughly 150 years of a format that has been declared obsolete at least twice.
-        </p>
       </nav>
 
-      {/* ------------------------------- chapter ------------------------------- */}
-      <article className="stage-detail" key={selected.key}>
-        <header className="stage-header">
-          <div className="stage-glyph" aria-hidden>
+      {/* ------------------------------ chapter ------------------------------ */}
+      <article className="story-read" key={selected.key}>
+        <div className="story-progress" aria-hidden>
+          <div className="story-progress-fill" style={{ width: `${progress}%` }} />
+        </div>
+
+        <header className={`story-header kind-${selected.kind}`}>
+          <div className="story-glyph" aria-hidden>
             {selected.glyph}
           </div>
-          <div className="stage-heading">
-            <div className="stage-kicker">
-              {era?.label ?? ""}
-              <span className="stage-pill">
-                Chapter {String(index + 1).padStart(2, "0")} of{" "}
-                {String(ALL_CHAPTERS.length).padStart(2, "0")}
-              </span>
+          <div>
+            <div className="story-kicker">
+              <span className="story-pill">{selected.label}</span>
+              {actOf(selected.key)}
             </div>
-            <div className="story-year">{selected.year}</div>
             <h2>{selected.title}</h2>
-            <p className="stage-sub">{selected.subtitle}</p>
+            <p className="story-sub">{selected.subtitle}</p>
           </div>
         </header>
 
-        <section className="stage-section">
-          {selected.paragraphs.map((text, i) => (
+        <section className="story-beat beat-moment">
+          <h4>The moment</h4>
+          {selected.moment.map((text, i) => (
             <p key={i}>{text}</p>
           ))}
         </section>
 
-        {selected.fact && (
-          <section className="stage-section footnote-fact">
-            <p>{selected.fact}</p>
-          </section>
+        <section className="story-beat beat-changed">
+          <h4>What changed</h4>
+          {selected.whatChanged.map((text, i) => (
+            <p key={i}>{text}</p>
+          ))}
+        </section>
+
+        {selected.hear && (
+          <Beat kicker="Hear the difference" beat={selected.hear} variant="hear" />
+        )}
+        {selected.explore && (
+          <Beat kicker="Explore the object" beat={selected.explore} variant="explore" />
         )}
 
-        {selected.yourRecord && (
-          <section className="stage-section measured">
-            <h4>On your record</h4>
-            <p>{selected.yourRecord}</p>
-          </section>
-        )}
+        {selected.question && <p className="story-question">{selected.question}</p>}
 
-        <footer className="stage-actions">
-          {next && (
-            <button className="btn small" onClick={() => setSelectedKey(next.key)}>
-              {next.year} · {next.title} ›
+        <footer className="story-nav">
+          {prev ? (
+            <button className="btn small" onClick={() => goto(prev.key)}>
+              ‹ {prev.title}
             </button>
+          ) : (
+            <span />
           )}
-          <button className="btn small" onClick={() => setTab("compare")}>
-            ⇄ Back to listening
-          </button>
+          {next ? (
+            <button className="btn small primary" onClick={() => goto(next.key)}>
+              {next.title} ›
+            </button>
+          ) : (
+            <span className="story-end">The end — put something else on the platter.</span>
+          )}
         </footer>
       </article>
     </div>

@@ -287,17 +287,17 @@ html, body, #root {
 
 canvas.waveform { width: 100%; height: 130px; display: block; border-radius: 6px; background: var(--bg-inset); }
 
-/* ---------------------------------------------------------- explorer --- */
+/* ------------------------------------------------------- vinyl story --- */
 
-.explorer-layout {
+.story-layout {
   display: grid;
-  grid-template-columns: 252px minmax(0, 760px);
-  gap: 20px;
+  grid-template-columns: 268px minmax(0, 720px);
+  gap: 22px;
   align-items: start;
 }
 
-/* Signal-chain rail */
-.stage-rail {
+/* Contents rail (rail-* classes are shared with the groove tab). */
+.story-rail {
   position: sticky;
   top: 0;
   background: var(--bg-raised);
@@ -310,7 +310,16 @@ canvas.waveform { width: 100%; height: 130px; display: block; border-radius: 6px
   text-transform: uppercase;
   letter-spacing: 1.4px;
   color: var(--text-dim);
-  padding: 0 6px 10px;
+  padding: 0 6px 8px;
+}
+.story-thesis {
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--text-dim);
+  font-style: italic;
+  margin: 0 6px 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px dashed var(--border);
 }
 .rail-phase { margin-bottom: 6px; }
 .rail-phase-label {
@@ -333,7 +342,6 @@ canvas.waveform { width: 100%; height: 130px; display: block; border-radius: 6px
   cursor: pointer;
   text-align: left;
   color: var(--text-dim);
-  position: relative;
 }
 .rail-stage:hover { background: var(--bg-inset); color: var(--text); }
 .rail-stage.active {
@@ -341,7 +349,6 @@ canvas.waveform { width: 100%; height: 130px; display: block; border-radius: 6px
   color: var(--text);
   box-shadow: inset 2px 0 0 var(--accent);
 }
-.rail-stage.bypassed .rail-name { text-decoration: line-through; text-decoration-color: var(--border); }
 .rail-glyph {
   width: 26px;
   height: 26px;
@@ -354,7 +361,6 @@ canvas.waveform { width: 100%; height: 130px; display: block; border-radius: 6px
   color: var(--accent);
   background: var(--bg-inset);
 }
-.rail-stage.bypassed .rail-glyph { color: var(--text-dim); }
 .rail-text { display: flex; flex-direction: column; min-width: 0; }
 .rail-name {
   font-size: 12.5px;
@@ -363,38 +369,42 @@ canvas.waveform { width: 100%; height: 130px; display: block; border-radius: 6px
   text-overflow: ellipsis;
 }
 .rail-sub { font-size: 10.5px; color: var(--text-dim); font-variant-numeric: tabular-nums; }
-.rail-footnote {
-  font-size: 11px;
-  color: var(--text-dim);
-  line-height: 1.5;
-  margin: 10px 6px 0;
-  padding-top: 10px;
-  border-top: 1px dashed var(--border);
-}
 
 /* Reading pane */
-.stage-detail {
+.story-read {
   background: var(--bg-raised);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 26px 30px 22px;
-  animation: stage-in 0.25s ease;
+  padding: 0 0 22px;
+  overflow: hidden;
+  animation: story-in 0.28s ease;
 }
-@keyframes stage-in {
-  from { opacity: 0; transform: translateY(6px); }
+@keyframes story-in {
+  from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: none; }
 }
-.stage-header {
+
+.story-progress { height: 2px; background: var(--bg-inset); }
+.story-progress-fill {
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.35s ease;
+}
+
+.story-header {
   display: flex;
   gap: 18px;
   align-items: flex-start;
-  padding-bottom: 18px;
+  padding: 26px 32px 20px;
   border-bottom: 1px solid var(--border);
-  margin-bottom: 6px;
 }
-.stage-glyph {
-  width: 54px;
-  height: 54px;
+.story-header.kind-prologue,
+.story-header.kind-epilogue {
+  background: linear-gradient(180deg, rgba(242, 163, 60, 0.07), transparent);
+}
+.story-glyph {
+  width: 56px;
+  height: 56px;
   flex: none;
   display: grid;
   place-items: center;
@@ -404,106 +414,115 @@ canvas.waveform { width: 100%; height: 130px; display: block; border-radius: 6px
   border: 1px solid var(--accent-dim);
   border-radius: 12px;
 }
-.stage-kicker {
+.story-kicker {
   font-size: 11px;
   text-transform: uppercase;
-  letter-spacing: 1.4px;
+  letter-spacing: 1.3px;
   color: var(--text-dim);
   display: flex;
   align-items: center;
   gap: 10px;
-  font-variant-numeric: tabular-nums;
 }
-.stage-pill {
+.story-pill {
   font-size: 10px;
   letter-spacing: 0.6px;
   padding: 2px 9px;
   border-radius: 999px;
-  border: 1px solid var(--border);
-  color: var(--text-dim);
-}
-.stage-pill.on { border-color: var(--good); color: var(--good); }
-.stage-heading h2 {
-  margin: 6px 0 4px;
-  font-family: Georgia, "Times New Roman", serif;
-  font-size: 26px;
-  font-weight: 600;
-  letter-spacing: 0.2px;
-}
-.stage-sub { margin: 0; color: var(--text-dim); font-size: 13.5px; font-style: italic; }
-
-.story-year {
-  font-family: Georgia, "Times New Roman", serif;
-  font-size: 40px;
-  line-height: 1;
+  border: 1px solid var(--accent-dim);
   color: var(--accent);
-  margin: 10px 0 2px;
-  letter-spacing: 1px;
+  white-space: nowrap;
 }
+.story-header h2 {
+  margin: 8px 0 5px;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 27px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+.story-sub { margin: 0; color: var(--text-dim); font-size: 13.5px; font-style: italic; }
 
-.stage-section.footnote-fact {
-  border-left: 2px solid var(--border);
-  padding-left: 16px;
-  margin-top: 6px;
-}
-.stage-section.footnote-fact p {
-  color: var(--text-dim);
-  font-size: 12.5px;
-  font-style: italic;
-}
-
-.stage-section { padding: 16px 0 2px; }
-.stage-section h4 {
+/* The four beats */
+.story-beat { padding: 18px 32px 2px; }
+.story-beat h4 {
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 1.3px;
   color: var(--accent);
-  margin: 0 0 7px;
+  margin: 0 0 8px;
   display: flex;
   align-items: center;
   gap: 10px;
 }
-.stage-section h4::after {
+.story-beat h4::after {
   content: "";
   flex: 1;
   height: 1px;
   background: var(--border);
 }
-.stage-section p {
-  margin: 0 0 10px;
+.story-beat p {
+  margin: 0 0 12px;
   font-size: 13.5px;
   line-height: 1.75;
   color: var(--text);
-  max-width: 68ch;
+  max-width: 66ch;
 }
 
-.stage-section.measured {
-  margin-top: 14px;
-  background: rgba(242, 163, 60, 0.06);
-  border: 1px solid rgba(242, 163, 60, 0.25);
+/* Beat 1 reads as the scene-setter: larger, quieter, serif. */
+.beat-moment p {
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 15.5px;
+  line-height: 1.7;
+  color: #d9d5cc;
+}
+
+/* Beats 3 and 4 are calls to action, tinted apart from the prose. */
+.beat-hear,
+.beat-explore {
+  margin: 16px 32px 0;
+  padding: 14px 18px 16px;
   border-radius: 10px;
-  padding: 14px 18px 8px;
+  border: 1px solid;
 }
-.stage-section.measured h4::after { background: rgba(242, 163, 60, 0.25); }
-.measured-file {
-  text-transform: none;
-  letter-spacing: 0;
-  color: var(--text-dim);
-  font-weight: 400;
+.beat-hear {
+  background: rgba(242, 163, 60, 0.06);
+  border-color: rgba(242, 163, 60, 0.28);
+}
+.beat-explore {
+  background: rgba(125, 200, 125, 0.05);
+  border-color: rgba(125, 200, 125, 0.24);
+}
+.beat-explore h4 { color: var(--good); }
+.beat-explore h4::after { background: rgba(125, 200, 125, 0.24); }
+.beat-hear h4::after { background: rgba(242, 163, 60, 0.28); }
+.beat-hear p,
+.beat-explore p { margin-bottom: 10px; }
+
+.story-question {
+  margin: 26px 32px 4px;
+  padding: 18px 22px;
+  border-left: 3px solid var(--accent);
+  background: var(--bg-inset);
+  border-radius: 0 8px 8px 0;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 17px;
+  line-height: 1.6;
+  color: var(--accent);
 }
 
-.stage-actions {
+.story-nav {
   display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-  margin-top: 18px;
-  padding-top: 16px;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin: 22px 32px 0;
+  padding-top: 18px;
   border-top: 1px solid var(--border);
 }
+.story-end { font-size: 12.5px; color: var(--text-dim); font-style: italic; }
 
-@media (max-width: 980px) {
-  .explorer-layout { grid-template-columns: 1fr; }
-  .stage-rail { position: static; }
+@media (max-width: 1000px) {
+  .story-layout { grid-template-columns: 1fr; }
+  .story-rail { position: static; }
 }
 
 /* ------------------------------------------------------------ groove --- */
