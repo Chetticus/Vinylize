@@ -20,7 +20,7 @@ export default function CompareTab() {
         <Waveform
           mins={origPeaks.mins}
           maxs={origPeaks.maxs}
-          color="#9b988f"
+          color="#8d7f66"
           playhead={playheadF}
           onSeek={(f) => seek(f * engine.duration)}
         />

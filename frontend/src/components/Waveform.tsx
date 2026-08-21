@@ -14,7 +14,7 @@ interface Props {
   onSeek?: (fraction: number) => void;
 }
 
-export default function Waveform({ mins, maxs, color = "#f2a33c", playhead, onSeek }: Props) {
+export default function Waveform({ mins, maxs, color = "#d4744b", playhead, onSeek }: Props) {
   const ref = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -45,7 +45,7 @@ export default function Waveform({ mins, maxs, color = "#f2a33c", playhead, onSe
 
     if (playhead !== undefined) {
       g.globalAlpha = 1;
-      g.fillStyle = "#e8e6e1";
+      g.fillStyle = "#ede1c7";
       g.fillRect(playhead * w - 1, 0, 2, h);
     }
   }, [mins, maxs, color, playhead]);

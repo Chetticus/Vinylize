@@ -1,48 +1,63 @@
 /* ===========================================================================
-   Vinylize — visual design
+   Vinylize - visual design
    ---------------------------------------------------------------------------
-   The brief: stop looking like a dark analytics dashboard. The reference is a
-   printed record catalogue from the LP era — aged paper, letterpress ink, one
-   spot colour, hairline rules, condensed caps for labels and a didone for
-   display. The app is treated as a printed document with two objects mounted
-   into it: a dark window onto the listening room (the 3D tab) and a hi-fi
-   faceplate along the bottom (the transport).
+   The reference is the print language of the LP era, reverse-printed: light
+   ink on dark stock, the way a record is read in a dimly lit listening room.
+   Aged tobacco-brown surfaces, warm parchment ink, one terracotta spot colour,
+   hairline rules, and three typefaces with distinct jobs (a didone for
+   display, a warm serif for reading, a condensed grotesque for labels).
+
+   The page is a printed document with two objects mounted into it: a dark
+   plate framing the listening room, and a hi-fi faceplate along the bottom
+   carrying the transport.
+
+   Naming note: this is a dark theme, so "ink" is the LIGHT mark and "paper"
+   is the DARK stock - reverse printing. Every relationship in the stylesheet
+   still holds; only the absolute values are inverted.
 
    Everything here is type, colour, spacing, rules and procedural texture.
    There are NO images, illustrations or generated artwork anywhere in this
-   stylesheet — the only texture is an SVG fractal-noise filter used the way a
-   gradient would be, to give the paper tooth.
+   stylesheet - the only texture is an SVG fractal-noise filter used the way a
+   gradient would be, to give the stock some tooth.
+
+   Contrast is measured, not eyeballed: body text sits at 12.8:1 and every
+   small label at 4.7:1 or better against the surface it actually appears on.
    =========================================================================== */
 
 :root {
-  /* --- paper and ink ---------------------------------------------------- */
-  --paper:       #ece2cd;  /* aged stock, the main surface                  */
-  --paper-lit:   #f4ecda;  /* a sheet catching light                        */
-  --paper-deep:  #ddd0b4;  /* shadowed stock, insets                        */
-  --ink:         #221b13;  /* warm near-black, never pure #000              */
-  --ink-soft:    #5f5545;  /* secondary text                                */
-  --ink-faint:   #6e6353;  /* captions, metadata (5.0:1 on paper)          */
-  --rule:        #c0b195;  /* hairlines                                     */
-  --rule-soft:   #d5c8ae;
+  /* --- dark stock, warm ------------------------------------------------- */
+  --paper:       #100d09;  /* the page                                      */
+  --paper-lit:   #241d15;  /* a raised sheet: sidebar, panels, the story     */
+  --paper-deep:  #0a0806;  /* insets, wells                                 */
+  --faceplate:   #2b2219;  /* the transport brushed band                    */
+
+  /* --- parchment ink ---------------------------------------------------- */
+  --ink:         #ede1c7;  /* primary text            (12.8:1 on a sheet)   */
+  --ink-soft:    #c0b092;  /* secondary text          ( 7.8:1)              */
+  --ink-faint:   #998b71;  /* captions, metadata      ( 5.0:1)              */
+  --rule:        #3f3325;  /* hairlines                                     */
+  --rule-soft:   #2e2519;
 
   /* --- one spot colour, plus brass for small marks ---------------------- */
-  --spot:        #8f3a24;  /* oxblood: active states, drop caps, marks      */
-  --spot-lit:    #a8492e;
-  --brass-ink:   #6f5320;  /* brass for text on paper  (6.1:1)             */
-  --brass-lit:   #b8903f;  /* brass for text on night  (6.3:1)             */
-  --brass:       #97742f;  /* brass for rules and marks, not body text     */
+  --spot:        #d4744b;  /* terracotta: active states, drop caps, marks    */
+  --spot-lit:    #e08a63;
+  --brass-ink:   #cca460;  /* brass for text on the page   (7.2:1)          */
+  --brass-lit:   #cca460;  /* brass for text on the plate  (8.8:1)          */
+  --brass:       #a8802f;  /* brass for rules and marks, not body text      */
 
-  /* --- the dark objects mounted into the page --------------------------- */
-  --night:       #17110d;  /* the listening room / faceplate                */
-  --night-lit:   #241a13;
+  /* --- the listening room ----------------------------------------------- */
+  --night:       #070504;  /* the plate: the darkest thing on the page      */
+  --night-lit:   #17110d;
   --night-rule:  #3a2b1f;
-  --night-text:  #d9cdb6;
+  --night-text:  #ede1c7;
 
-  --good:        #4f6b43;
-  --danger:      #943521;
+  --good:        #93b277;
+  --danger:      #d96f50;
 
-  /* Paper tooth. A fractal-noise filter, used exactly as a gradient would
-     be — a procedural texture primitive, not artwork. */
+  /* Stock tooth. A fractal-noise filter, used exactly as a gradient would
+     be - a procedural texture primitive, not artwork. On dark stock it is
+     blended with overlay rather than multiply, so it lifts grain into the
+     surface instead of disappearing into it. */
   --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23g)'/%3E%3C/svg%3E");
 
   /* Aliases for the previous palette, so any inline style still naming an
@@ -55,7 +70,7 @@
   --text: var(--ink);
   --text-dim: var(--ink-faint);
   --accent: var(--spot);
-  --accent-dim: var(--brass);
+  --accent-dim: var(--brass-ink);
   --radius: 0px;
 
   --display: "Bodoni Moda", "Didot", Georgia, "Times New Roman", serif;
@@ -80,8 +95,8 @@ body::before {
   position: fixed;
   inset: 0;
   background-image: var(--grain);
-  opacity: 0.055;
-  mix-blend-mode: multiply;
+  opacity: 0.035;
+  mix-blend-mode: overlay;
   pointer-events: none;
   z-index: 9999;
 }
@@ -114,7 +129,7 @@ body::before {
 .sidebar {
   background: var(--paper-lit);
   border-right: 1px solid var(--rule);
-  box-shadow: inset -14px 0 22px -18px rgba(34, 27, 19, 0.45);
+  box-shadow: inset -16px 0 26px -20px rgba(0, 0, 0, 0.8);
   padding: 26px 24px 30px;
   overflow-y: auto;
   display: flex;
@@ -128,8 +143,8 @@ body::before {
   content: "";
   display: block;
   margin-top: 14px;
-  border-top: 2px solid var(--ink);
-  border-bottom: 1px solid var(--ink);
+  border-top: 2px solid var(--brass);
+  border-bottom: 1px solid var(--rule);
   height: 3px;
 }
 .brand h1 {
@@ -191,7 +206,7 @@ body::before {
 /* --- upload: a paste-in slot, not a rounded card ------------------------- */
 .upload-zone {
   border: 1px dashed var(--rule);
-  background: rgba(255, 255, 255, 0.32);
+  background: rgba(237, 225, 199, 0.035);
   padding: 22px 16px;
   text-align: center;
   cursor: pointer;
@@ -205,7 +220,7 @@ body::before {
 .upload-zone.dragging {
   border-color: var(--spot);
   border-style: solid;
-  background: rgba(143, 58, 36, 0.06);
+  background: rgba(212, 116, 75, 0.10);
   color: var(--ink);
 }
 .upload-zone strong {
@@ -251,7 +266,7 @@ body::before {
   border-left: 3px solid var(--spot);
   padding: 14px 16px;
   font-size: 12.5px;
-  box-shadow: 2px 2px 0 rgba(34, 27, 19, 0.06);
+  box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.45);
 }
 .file-info .name {
   font-family: var(--display);
@@ -289,9 +304,9 @@ body::before {
   font-size: 12.5px;
   transition: background 0.15s, color 0.15s;
 }
-.library-list li:hover { background: rgba(34, 27, 19, 0.05); color: var(--ink); }
+.library-list li:hover { background: rgba(237, 225, 199, 0.05); color: var(--ink); }
 .library-list li.active {
-  background: rgba(143, 58, 36, 0.08);
+  background: rgba(212, 116, 75, 0.11);
   color: var(--ink);
   box-shadow: inset 3px 0 0 var(--spot);
 }
@@ -346,8 +361,8 @@ body::before {
   gap: 0;
   padding: 0 34px;
   background: var(--paper-lit);
-  border-bottom: 1px solid var(--ink);
-  box-shadow: 0 1px 0 var(--rule);
+  border-bottom: 1px solid var(--rule);
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.35);
 }
 .tabbar button {
   appearance: none;
@@ -401,9 +416,9 @@ body::before {
   height: 132px;
   border-radius: 50%;
   background:
-    radial-gradient(circle at center, var(--spot) 0 9px, var(--paper) 9px 13px, transparent 13px),
+    radial-gradient(circle at center, var(--spot) 0 9px, #0a0806 9px 13px, transparent 13px),
     repeating-radial-gradient(circle at center, #1d1712 0 2px, #2b231b 2px 3px);
-  box-shadow: 0 6px 20px rgba(34, 27, 19, 0.3);
+  box-shadow: 0 8px 26px rgba(0, 0, 0, 0.6);
   animation: spin 8s linear infinite;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
@@ -414,7 +429,7 @@ body::before {
   border: 1px solid var(--rule);
   padding: 24px 28px;
   margin-bottom: 22px;
-  box-shadow: 3px 3px 0 rgba(34, 27, 19, 0.05);
+  box-shadow: 3px 3px 0 rgba(0, 0, 0, 0.4);
 }
 .panel h3 {
   margin: 0 0 6px;
@@ -486,7 +501,7 @@ canvas.waveform {
   font-weight: 600;
   color: var(--ink);
   padding-bottom: 10px;
-  border-bottom: 2px solid var(--ink);
+  border-bottom: 2px solid var(--brass);
 }
 .story-thesis {
   font-size: 12.5px;
@@ -550,7 +565,7 @@ canvas.waveform {
   background: var(--paper-lit);
   border: 1px solid var(--rule);
   padding: 0 0 34px;
-  box-shadow: 4px 4px 0 rgba(34, 27, 19, 0.05);
+  box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.4);
   animation: sheet-in 0.3s ease;
 }
 @keyframes sheet-in {
@@ -569,7 +584,7 @@ canvas.waveform {
   border-bottom: 1px solid var(--rule);
 }
 .story-header.kind-prologue,
-.story-header.kind-epilogue { background: rgba(143, 58, 36, 0.045); }
+.story-header.kind-epilogue { background: rgba(212, 116, 75, 0.06); }
 .story-glyph {
   width: 62px;
   height: 62px;
@@ -724,12 +739,12 @@ canvas.waveform {
   flex: 1;
   position: relative;
   min-height: 0;
-  border: 1px solid var(--ink);
+  border: 1px solid var(--rule);
   padding: 10px;
   background: var(--night);
   box-shadow:
     inset 0 0 0 1px var(--night-rule),
-    4px 4px 0 rgba(34, 27, 19, 0.08);
+    4px 4px 0 rgba(0, 0, 0, 0.5);
   overflow: hidden;
 }
 
@@ -866,9 +881,9 @@ canvas.waveform {
   align-items: center;
   gap: 18px;
   padding: 15px 34px;
-  background: linear-gradient(180deg, var(--night-lit), var(--night));
-  border-top: 3px solid var(--ink);
-  box-shadow: inset 0 1px 0 rgba(217, 205, 182, 0.08);
+  background: linear-gradient(180deg, var(--faceplate), #1d1610);
+  border-top: 2px solid var(--brass);
+  box-shadow: inset 0 1px 0 rgba(237, 225, 199, 0.09);
   color: var(--night-text);
 }
 .transport .btn {
@@ -931,7 +946,7 @@ canvas.waveform {
   display: flex;
   gap: 12px;
   align-items: center;
-  box-shadow: 3px 3px 0 rgba(34, 27, 19, 0.14);
+  box-shadow: 3px 3px 0 rgba(0, 0, 0, 0.5);
 }
 .status.error { border-color: var(--danger); color: var(--danger); }
 .status-body { display: flex; flex-direction: column; gap: 8px; min-width: 210px; }
@@ -949,7 +964,7 @@ canvas.waveform {
 /* ============================ form controls ============================== */
 
 input[type="range"] { cursor: pointer; }
-::selection { background: rgba(143, 58, 36, 0.25); }
+::selection { background: rgba(212, 116, 75, 0.3); color: var(--ink); }
 
 /* Scrollbars, in the paper palette rather than the browser default. */
 * { scrollbar-width: thin; scrollbar-color: var(--rule) transparent; }
