@@ -33,9 +33,9 @@ export default function Sidebar() {
           Vinyl<em>ize</em>
         </h1>
         <p>
-          Upload a song and watch it become a vinyl record — every audible change traced to the
-          physics that causes it.
+          Cut any song to a virtual record, then hear what the needle makes of it.
         </p>
+        <div className="brand-credit">Long-playing · 33⅓ rpm · microgroove</div>
       </div>
 
       <div className="side-section">
@@ -54,9 +54,8 @@ export default function Sidebar() {
             onFiles(e.dataTransfer.files);
           }}
         >
-          Drop an <strong>MP3 / WAV</strong> here
-          <br />
-          or click to browse
+          <strong>Drop a record in</strong>
+          MP3 or WAV — or click to browse
           <input
             ref={fileInput}
             type="file"
@@ -67,12 +66,10 @@ export default function Sidebar() {
         </div>
         <div style={{ marginTop: 10, textAlign: "center" }}>
           <button className="btn" onClick={() => void useDemo()} disabled={loading !== null}>
-            ▶ No file handy? Try the demo groove
+            ▶ Play the demo record
           </button>
         </div>
-        <p style={{ fontSize: 11.5, color: "var(--text-dim)", marginTop: 8 }}>
-          Up to the first 3 minutes are cut to the disc.
-        </p>
+        <p className="slot-note">Up to the first three minutes are cut to the disc.</p>
       </div>
 
       {analysis && (
@@ -109,9 +106,7 @@ export default function Sidebar() {
               </li>
             ))}
           </ul>
-          <p style={{ fontSize: 11, color: "var(--text-dim)", margin: "6px 0 0" }}>
-            Recent clips stay on the platter shelf — click one to put it back on.
-          </p>
+          <p className="slot-note">Recent clips stay on the shelf — click one to play it again.</p>
         </div>
       )}
 
