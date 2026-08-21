@@ -7,7 +7,9 @@
 import { create } from "zustand";
 
 import {
+  ApiUnreachableError,
   analyzeFile,
+  checkApiHealth,
   fetchAudioBuffer,
   fetchGeometry,
   loadDemo,
@@ -45,6 +47,9 @@ interface SessionState {
   activeTab: TabKey;
   /** Card key the Explorer should open + scroll to (set by sidebar links). */
   explorerFocus: string | null;
+  /** Set when the API cannot be reached at all, so the UI can explain how
+   * to start the missing half instead of showing a raw fetch error. */
+  offline: { message: string; missing: "web" | "engine" } | null;
   loading: string | null; // human-readable phase, or null when idle
   /** Render progress 0..1 while the backend is simulating, else null. */
   progressFrac: number | null;
@@ -59,6 +64,8 @@ interface SessionState {
   useDemo: () => Promise<void>;
   selectSession: (sessionId: string) => Promise<void>;
   setTab: (tab: TabKey) => void;
+  /** Liveness probe; run at startup and from the offline notice's retry. */
+  checkEngine: () => Promise<void>;
   /** Jump to the Explorer with a specific stage card selected. */
   openExplorerCard: (key: string) => void;
   clearExplorerFocus: () => void;
@@ -157,10 +164,12 @@ export const useStore = create<SessionState>((set, get) => {
         playing: wasPlaying,
       });
     } catch (err) {
+      const unreachable = err instanceof ApiUnreachableError;
       set({
         loading: null,
         progressFrac: null,
-        error: err instanceof Error ? err.message : String(err),
+        error: unreachable ? null : err instanceof Error ? err.message : String(err),
+        offline: unreachable ? { message: err.message, missing: err.missing } : null,
       });
     } finally {
       window.clearInterval(poll);
@@ -194,7 +203,12 @@ export const useStore = create<SessionState>((set, get) => {
     try {
       await activate(await load());
     } catch (err) {
-      set({ loading: null, error: err instanceof Error ? err.message : String(err) });
+      const unreachable = err instanceof ApiUnreachableError;
+      set({
+        loading: null,
+        error: unreachable ? null : err instanceof Error ? err.message : String(err),
+        offline: unreachable ? { message: err.message, missing: err.missing } : null,
+      });
     }
   }
 
@@ -208,6 +222,7 @@ export const useStore = create<SessionState>((set, get) => {
     config: { ...DEFAULT_CONFIG },
     activeTab: "waveform",
     explorerFocus: null,
+    offline: null,
     loading: null,
     progressFrac: null,
     error: null,
@@ -231,6 +246,13 @@ export const useStore = create<SessionState>((set, get) => {
     },
 
     setTab: (tab) => set({ activeTab: tab }),
+
+    checkEngine: async () => {
+      const health = await checkApiHealth();
+      set({
+        offline: health.ok ? null : { message: health.message, missing: health.missing },
+      });
+    },
     openExplorerCard: (key) => set({ activeTab: "explorer", explorerFocus: key }),
     clearExplorerFocus: () => set({ explorerFocus: null }),
 

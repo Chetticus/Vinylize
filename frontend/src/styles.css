@@ -961,6 +961,43 @@ canvas.waveform {
   animation: spin 0.85s linear infinite;
 }
 
+/* ---- offline notice: shown when a half of the stack is missing ---------- */
+
+.offline-notice {
+  position: fixed;
+  left: 50%;
+  bottom: 96px;
+  transform: translateX(-50%);
+  z-index: 40;
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  max-width: 640px;
+  padding: 18px 22px;
+  background: var(--paper-lit);
+  border: 1px solid var(--danger);
+  border-left: 4px solid var(--danger);
+  box-shadow: 5px 5px 0 rgba(0, 0, 0, 0.55);
+}
+.offline-mark { font-size: 21px; color: var(--danger); line-height: 1.1; }
+.offline-body { flex: 1; }
+.offline-body h4 {
+  margin: 0 0 6px;
+  font-family: var(--label);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--danger);
+}
+.offline-body p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.65;
+  color: var(--ink-soft);
+}
+.offline-notice .btn { flex: none; align-self: center; }
+
 /* ============================ form controls ============================== */
 
 input[type="range"] { cursor: pointer; }

@@ -1,3 +1,5 @@
+import { useEffect } from "react";
+
 import Sidebar from "./components/Sidebar";
 import Transport from "./components/Transport";
 import CompareTab from "./components/tabs/CompareTab";
@@ -31,7 +33,14 @@ function Placeholder() {
 }
 
 export default function App() {
-  const { activeTab, setTab, analysis, processResult, loading, progressFrac, error } = useStore();
+  const { activeTab, setTab, analysis, processResult, loading, progressFrac, error, offline, checkEngine } =
+    useStore();
+
+  // Probe once on load, so a missing engine is announced up front rather
+  // than discovered when someone clicks play.
+  useEffect(() => {
+    void checkEngine();
+  }, [checkEngine]);
   const ready = analysis !== null && processResult !== null;
 
   return (
@@ -69,6 +78,21 @@ export default function App() {
 
         <Transport />
       </div>
+
+      {offline && (
+        <div className="offline-notice" role="alert">
+          <div className="offline-mark" aria-hidden>
+            ⚠
+          </div>
+          <div className="offline-body">
+            <h4>{offline.missing === "engine" ? "The audio engine is not running" : "The app server is not reachable"}</h4>
+            <p>{offline.message}</p>
+          </div>
+          <button className="btn small" onClick={() => void checkEngine()}>
+            Try again
+          </button>
+        </div>
+      )}
 
       <div className="statusbar">
         {loading && (

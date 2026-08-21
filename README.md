@@ -104,25 +104,33 @@ is in [docs/DESIGN.md](docs/DESIGN.md).
 
 ## Running locally
 
-Backend (Python ≥ 3.11):
+Vinylize is two halves: a Vite web app and a Python audio engine behind it.
+One command starts both.
+
+First-time setup of the engine (Python >= 3.11):
 
 ```bash
 cd backend
 python -m venv .venv
 .venv/Scripts/activate        # Windows; source .venv/bin/activate elsewhere
 pip install -e ".[dev]"
-uvicorn app.main:app --port 8000
 ```
 
-Frontend (Node ≥ 20):
+Then, from the frontend:
 
 ```bash
 cd frontend
 npm install
-npm run dev                   # Vite proxies /api to :8000
+npm run dev
 ```
 
-Open http://localhost:5173.
+Open http://localhost:5173. `npm run dev` runs the web app and the engine
+together and shuts both down on Ctrl-C; use `npm run dev:web` if you want the
+web half alone (the app still boots and The Vinyl Story is readable, but no
+audio can be cut).
+
+If the engine is not running, the app says so on load and tells you how to
+start it, rather than failing at the first click.
 
 ## Tests
 
