@@ -18,6 +18,14 @@ export interface AnalyzeResponse {
   filename: string;
 }
 
+/** An example record offered in the sidebar (GET /api/examples). */
+export interface ExampleRecord {
+  id: string;
+  title: string;
+  artist: string | null;
+  duration_s: number;
+}
+
 /** Stage toggles + parameter scales (1.0 = physically realistic). */
 export interface ProcessConfig {
   riaa: boolean;

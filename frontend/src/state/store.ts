@@ -12,13 +12,16 @@ import {
   checkApiHealth,
   fetchAudioBuffer,
   fetchGeometry,
+  listExamples,
   loadDemo,
+  loadExample,
   processAudio,
 } from "../api/client";
 import { PlaybackEngine, type PlaybackMode } from "../audio/playbackEngine";
 import {
   DEFAULT_CONFIG,
   type AnalyzeResponse,
+  type ExampleRecord,
   type GrooveGeometry,
   type ProcessConfig,
   type ProcessResponse,
@@ -36,6 +39,8 @@ interface SessionState {
   analysis: AnalyzeResponse | null;
   /** Previously loaded clips, most recent first — click to switch back. */
   library: AnalyzeResponse[];
+  /** Example records the engine offers (empty when it has none). */
+  examples: ExampleRecord[];
   processResult: ProcessResponse | null;
   geometry: GrooveGeometry | null;
   vinylPeaks: { mins: number[]; maxs: number[] } | null;
@@ -61,6 +66,7 @@ interface SessionState {
   volume: number;
 
   upload: (file: File) => Promise<void>;
+  useExample: (id: string) => Promise<void>;
   useDemo: () => Promise<void>;
   selectSession: (sessionId: string) => Promise<void>;
   setTab: (tab: TabKey) => void;
@@ -215,6 +221,7 @@ export const useStore = create<SessionState>((set, get) => {
   return {
     analysis: null,
     library: [],
+    examples: [],
     processResult: null,
     geometry: null,
     vinylPeaks: null,
@@ -234,6 +241,7 @@ export const useStore = create<SessionState>((set, get) => {
 
     upload: (file) => ingest(() => analyzeFile(file)),
     useDemo: () => ingest(loadDemo),
+    useExample: (id) => ingest(() => loadExample(id)),
 
     selectSession: async (sessionId) => {
       const entry = get().library.find((e) => e.session_id === sessionId);
@@ -252,6 +260,13 @@ export const useStore = create<SessionState>((set, get) => {
       set({
         offline: health.ok ? null : { message: health.message, missing: health.missing },
       });
+      if (health.ok && get().examples.length === 0) {
+        try {
+          set({ examples: await listExamples() });
+        } catch {
+          /* examples are optional; the upload slot still works */
+        }
+      }
     },
     openExplorerCard: (key) => set({ activeTab: "explorer", explorerFocus: key }),
     clearExplorerFocus: () => set({ explorerFocus: null }),

@@ -1,0 +1,10 @@
+# Keep the image small and reproducible: dependencies are installed inside.
+**/node_modules
+**/.venv
+**/__pycache__
+**/*.pyc
+**/*.egg-info
+**/.pytest_cache
+frontend/dist
+docs
+.git

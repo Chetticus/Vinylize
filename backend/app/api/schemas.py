@@ -101,3 +101,12 @@ class ProcessResponse(BaseModel):
 
 class ErrorResponse(BaseModel):
     detail: str
+
+
+class ExampleRecord(BaseModel):
+    """An example record offered in the sidebar."""
+
+    id: str
+    title: str
+    artist: str | None = None
+    duration_s: float

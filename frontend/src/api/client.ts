@@ -26,6 +26,7 @@
 
 import type {
   AnalyzeResponse,
+  ExampleRecord,
   GeometryMeta,
   GrooveGeometry,
   GrooveWindow,
@@ -109,6 +110,16 @@ export async function analyzeFile(file: File): Promise<AnalyzeResponse> {
   const form = new FormData();
   form.append("file", file);
   const res = await apiFetch("/api/analyze", { method: "POST", body: form });
+  return res.json();
+}
+
+export async function listExamples(): Promise<ExampleRecord[]> {
+  const res = await apiFetch("/api/examples");
+  return res.json();
+}
+
+export async function loadExample(id: string): Promise<AnalyzeResponse> {
+  const res = await apiFetch(`/api/examples/${encodeURIComponent(id)}`, { method: "POST" });
   return res.json();
 }
 

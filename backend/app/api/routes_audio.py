@@ -21,6 +21,7 @@ from fastapi.responses import Response
 
 from app.api import schemas
 from app.api.sessions import Session, store
+from app.audio import examples
 from app.audio.demo import synthesize_demo
 from app.audio.ingestion import AudioIngestError, DecodedAudio, decode_upload
 from app.audio.waveform import peak_decimate
@@ -64,6 +65,30 @@ async def demo() -> schemas.AnalyzeResponse:
     """Create a session from the built-in synthesized demo loop."""
     audio = await run_in_threadpool(synthesize_demo)
     session = store.create(audio, filename="demo-groove.wav (synthesized)")
+    return _analyze_response(session)
+
+
+@router.get("/examples", response_model=list[schemas.ExampleRecord])
+async def list_examples() -> list[schemas.ExampleRecord]:
+    """Example records available to cut without an upload."""
+    found = await run_in_threadpool(examples.available)
+    return [
+        schemas.ExampleRecord(id=ex.id, title=ex.title, artist=ex.artist, duration_s=dur)
+        for ex, dur in found
+    ]
+
+
+@router.post("/examples/{example_id}", response_model=schemas.AnalyzeResponse)
+async def load_example(example_id: str) -> schemas.AnalyzeResponse:
+    """Create a session from one of the example records."""
+    ex = examples.find(example_id)
+    if ex is None or not (examples.examples_dir() / ex.file).is_file():
+        raise HTTPException(status_code=404, detail="Unknown example record.")
+    try:
+        audio = await run_in_threadpool(examples.decode_example, ex)
+    except AudioIngestError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    session = store.create(audio, filename=examples.display_name(ex))
     return _analyze_response(session)
 
 

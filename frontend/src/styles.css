@@ -291,6 +291,93 @@ body::before {
 .file-info dt { color: var(--ink-faint); text-transform: uppercase; letter-spacing: 0.1em; font-size: 10px; }
 .file-info dd { margin: 0; text-align: right; color: var(--ink); font-variant-numeric: tabular-nums; }
 
+/* --- example records: a short shelf under the upload slot ---------------- */
+.examples { margin-top: 18px; }
+.examples-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+  font-family: var(--label);
+  font-size: 9.5px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+.examples-head::after { content: ""; flex: 1; border-bottom: 1px dotted var(--rule); }
+.example-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.example {
+  appearance: none;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px 8px 8px;
+  background: rgba(237, 225, 199, 0.03);
+  border: 1px solid var(--rule-soft);
+  color: var(--ink-soft);
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.example:hover:not(:disabled) { background: rgba(237, 225, 199, 0.07); border-color: var(--rule); color: var(--ink); }
+.example:focus-visible { outline: 1px solid var(--brass-lit); outline-offset: 2px; }
+.example:disabled { cursor: default; }
+.example:disabled:not(.active) { opacity: 0.55; }
+.example.active {
+  background: rgba(212, 116, 75, 0.11);
+  border-color: rgba(212, 116, 75, 0.45);
+  box-shadow: inset 3px 0 0 var(--spot);
+  color: var(--ink);
+}
+.example-disc {
+  flex: none;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  --label-ink: var(--spot);
+  background:
+    radial-gradient(circle at center, #0a0806 0 1.5px, var(--label-ink) 1.5px 8px, #0a0806 8px 9px, transparent 9px),
+    repeating-radial-gradient(circle at center, #16110d 0 1px, #2a2119 1px 2px);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.55);
+}
+.example-disc.tone-1 { --label-ink: #c9b99a; }
+.example-disc.tone-2 { --label-ink: #6f8a93; }
+.example-disc.spinning { animation: spin 1.8s linear infinite; }
+.example-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.example-title {
+  font-family: var(--display);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.2;
+  color: inherit;
+  /* Long titles take a second line rather than an ellipsis. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.example-artist {
+  font-family: var(--label);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.example-time {
+  font-family: var(--label);
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  color: var(--ink-faint);
+  font-variant-numeric: tabular-nums;
+}
+@media (prefers-reduced-motion: reduce) {
+  .example-disc.spinning { animation: none; }
+}
+
 /* --- library: a stack of sleeves ---------------------------------------- */
 .library-list { margin: 0; padding: 0; list-style: none; }
 .library-list li {

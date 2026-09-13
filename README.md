@@ -148,3 +148,19 @@ spiral map invertibility, near-transparency of the full chain with physical stag
 (the numeric floor under every audible effect), the emergent inner-groove treble loss,
 mono → flat-vertical groove geometry, deterministic click seeding, API contracts, and a
 pipeline wall-clock budget.
+
+## Deploying
+
+The repo ships a `Dockerfile` that builds the web app and serves it from the
+engine on port 7860 — one container, one origin. `deploy/huggingface.py`
+publishes it to a free Hugging Face Space (Docker SDK):
+
+```bash
+pip install huggingface_hub
+hf auth login              # a token with write access
+python deploy/huggingface.py
+```
+
+Example records: put audio files named as in `backend/app/audio/examples.py`
+into `backend/examples/` (git-ignored) and they appear under the upload slot;
+the deploy script ships them to the Space unless `--no-examples` is given.

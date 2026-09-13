@@ -13,3 +13,7 @@ frontend/dist/
 .vscode/
 .DS_Store
 Thumbs.db
+
+# Example record audio: commercial recordings, never committed (see
+# backend/app/audio/examples.py). Copied in locally / at deploy time.
+backend/examples/

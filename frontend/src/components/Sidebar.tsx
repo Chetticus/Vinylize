@@ -15,9 +15,24 @@ const CONCEPTS: Array<[string, string]> = [
   ["The record that refused to disappear", "refused"],
 ];
 
+function formatTime(s: number): string {
+  const m = Math.floor(s / 60);
+  return `${m}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
+}
+
 export default function Sidebar() {
-  const { analysis, library, selectSession, upload, useDemo, loading, openExplorerCard } =
-    useStore();
+  const {
+    analysis,
+    library,
+    examples,
+    selectSession,
+    upload,
+    useDemo,
+    useExample,
+    loading,
+    playing,
+    openExplorerCard,
+  } = useStore();
   const fileInput = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
 
@@ -70,6 +85,39 @@ export default function Sidebar() {
           </button>
         </div>
         <p className="slot-note">Up to the first three minutes are cut to the disc.</p>
+
+        {examples.length > 0 && (
+          <div className="examples">
+            <div className="examples-head">Or pull one off the shelf</div>
+            <ul className="example-list">
+              {examples.map((ex, i) => {
+                const name = ex.artist ? `${ex.artist} — ${ex.title}` : ex.title;
+                const active = analysis?.filename === name;
+                return (
+                  <li key={ex.id}>
+                    <button
+                      className={`example${active ? " active" : ""}`}
+                      onClick={() => void useExample(ex.id)}
+                      disabled={loading !== null || active}
+                      aria-pressed={active}
+                      title={active ? `${name} is on the platter` : `Cut ${name} to disc`}
+                    >
+                      <span
+                        className={`example-disc tone-${i % 3}${active && playing ? " spinning" : ""}`}
+                        aria-hidden
+                      />
+                      <span className="example-text">
+                        <span className="example-title">{ex.title}</span>
+                        <span className="example-artist">{ex.artist ?? "Example record"}</span>
+                      </span>
+                      <span className="example-time">{formatTime(ex.duration_s)}</span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        )}
       </div>
 
       {analysis && (
