@@ -7,6 +7,9 @@ import { type LodMode } from "../groove/grooveLod";
 import { clipTime, isFrozen, setFrozen, stylusStatus, type StylusStatus } from "../groove/recordMotion";
 import { ARM, validateKinematics } from "../groove/tonearmKinematics";
 import TurntableScene, { type EnvironmentKind, type FlyRequest } from "../groove/TurntableScene";
+import { prepareVinylSurface } from "../groove/GrooveOverviewMaterial";
+import { prepareKit } from "../groove/room/kit";
+import { detectQuality } from "../groove/room/quality";
 
 const STEREO_VIEWS: Array<[ChannelView, string, string]> = [
   ["both", "Full stereo", "Complete groove: lateral swing + wall/depth modulation"],
@@ -48,6 +51,40 @@ export default function GrooveTab() {
   const panelToggled = useRef(false);
   const panelRef = useRef<HTMLElement>(null);
   const [panelInset, setPanelInset] = useState(0);
+
+  // Loading curtain. The room's textures are painted in small yielded steps
+  // first (progress bar), then the canvas mounts and compiles its shaders
+  // behind the curtain; only then does the curtain lift. Painting happens
+  // once per session — later visits skip straight to compiling.
+  const [kitFrac, setKitFrac] = useState(0);
+  const [kitReady, setKitReady] = useState(false);
+  const [sceneReady, setSceneReady] = useState(false);
+  const [curtainGone, setCurtainGone] = useState(false);
+  const hasGeometry = !!geometry;
+  useEffect(() => {
+    if (!geometry || kitReady) return;
+    let alive = true;
+    // Give the curtain a moment to paint before the first heavy step. The
+    // room's textures and this record's groove strips are computed in Web
+    // Workers in parallel; the page only wraps the finished pixels.
+    const id = window.setTimeout(() => {
+      Promise.all([
+        prepareKit(detectQuality(), (f) => alive && setKitFrac(f)),
+        prepareVinylSurface(geometry),
+      ]).then(() => alive && setKitReady(true));
+    }, 40);
+    return () => {
+      alive = false;
+      window.clearTimeout(id);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasGeometry]);
+  // Fallback in case the fade's transitionend never arrives.
+  useEffect(() => {
+    if (!sceneReady) return;
+    const id = window.setTimeout(() => setCurtainGone(true), 900);
+    return () => window.clearTimeout(id);
+  }, [sceneReady]);
 
   // Tell the camera how much of the canvas the card covers, so the subject
   // is framed in the part left visible (see CameraRig's film offset).
@@ -142,25 +179,52 @@ export default function GrooveTab() {
       </div>
 
       <div className="groove-wrap">
-        <TurntableScene
-          geometry={geometry}
-          filename={analysis.filename}
-          sessionId={analysis.session_id}
-          dataVersion={processResult}
-          environment={environment}
-          view={view}
-          audioBoost={effectiveBoost}
-          cutaway={cutaway}
-          guides={guides}
-          follow={follow}
-          stylusSizeScale={config.stylus_size}
-          debug={debug}
-          fly={fly}
-          resetSignal={resetSignal}
-          onScrub={seek}
-          onMicroActive={setMicroActive}
-          insetRight={panelInset}
-        />
+        {kitReady && (
+          <TurntableScene
+            onReady={() => setSceneReady(true)}
+            geometry={geometry}
+            filename={analysis.filename}
+            sessionId={analysis.session_id}
+            dataVersion={processResult}
+            environment={environment}
+            view={view}
+            audioBoost={effectiveBoost}
+            cutaway={cutaway}
+            guides={guides}
+            follow={follow}
+            stylusSizeScale={config.stylus_size}
+            debug={debug}
+            fly={fly}
+            resetSignal={resetSignal}
+            onScrub={seek}
+            onMicroActive={setMicroActive}
+            insetRight={panelInset}
+          />
+        )}
+
+        {!curtainGone && (
+          <div
+            className={`groove-loading${sceneReady ? " lifted" : ""}`}
+            role="status"
+            aria-live="polite"
+            onTransitionEnd={() => sceneReady && setCurtainGone(true)}
+          >
+            <div className="loading-disc" aria-hidden />
+            <div className="loading-copy">
+              <span className="loading-kicker">Now setting up</span>
+              <b>{kitReady ? "Warming up the valves…" : "Dressing the listening room…"}</b>
+              <div className="progress-track" aria-hidden>
+                <div
+                  className="progress-fill"
+                  style={{ width: `${Math.round((kitReady ? 0.85 + (sceneReady ? 0.15 : 0) : kitFrac * 0.85) * 100)}%` }}
+                />
+              </div>
+              <span className="loading-note">
+                {kitReady ? "Compiling the lighting" : "Painting wood grain, plaster and rain — first visit only"}
+              </span>
+            </div>
+          </div>
+        )}
 
         {/* ------------- inspection card (top-right, collapsible) ------------- */}
         <aside

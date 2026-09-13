@@ -921,3 +921,15 @@ overruled it is worth less than one that does.
     (dev builds only) renders exact frames at a fixed size and posts them to a local
     receiver, which is how every iteration — and the before/after images in
     `docs/screenshots` — was inspected.
+
+20. **v0.12: no freeze when opening the 3D tab.** Measured with a main-thread
+    probe: opening the tab blocked for up to 2.3 s at a time (about 10 s end to end
+    here) — painting the room's textures synchronously, then 0.86 s building the
+    record's groove strips, then compiling shaders. Now a loading curtain (a record
+    turning at 33⅓ with a progress bar) goes up first; the pure pixel work — room
+    painters (`room/pixels.ts`) and groove strips (`vinylStrips.ts`) — runs in a
+    pool of Web Workers and transfers finished buffers back; the page only wraps
+    them, builds materials one per macrotask, mounts the room in six staged parts,
+    and pre-compiles with `compileAsync` before the curtain lifts. Longest block
+    measured afterwards: ~0.27 s. Returning to the tab no longer repaints (GPU
+    resources are released on unmount but the painted pixels are kept).

@@ -72,6 +72,8 @@ interface Props {
   resetSignal: number;
   onScrub: (t: number) => void;
   onMicroActive: (active: boolean) => void;
+  /** Called once shaders are compiled and the first frame can be shown. */
+  onReady?: () => void;
   /** Width (px) of UI overlaying the canvas's right edge; the camera's
    * frame is shifted so the subject centres in the unobstructed part. */
   insetRight?: number;
@@ -449,6 +451,46 @@ function CameraRig({
   );
 }
 
+/**
+ * Compiles every material in the scene before the canvas is revealed.
+ * Uses KHR_parallel_shader_compile where the browser offers it, so the
+ * compile happens off the main thread and the loading screen keeps moving;
+ * without it this degrades to an ordinary (blocking) compile.
+ */
+function WarmUp({ armed, onReady }: { armed: boolean; onReady?: () => void }) {
+  const gl = useThree((s) => s.gl);
+  const scene = useThree((s) => s.scene);
+  const camera = useThree((s) => s.camera);
+  const fired = useRef(false);
+  useEffect(() => {
+    if (!armed || fired.current) return;
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      fired.current = true;
+      onReady?.();
+    };
+    const id = window.setTimeout(async () => {
+      try {
+        await gl.compileAsync(scene, camera);
+      } catch {
+        /* a failed pre-compile just means compiling on first draw */
+      }
+      // Let one real frame draw (shadow-map programs compile there) before
+      // lifting the curtain; the timeout covers throttled background tabs.
+      requestAnimationFrame(() => requestAnimationFrame(finish));
+      window.setTimeout(finish, 500);
+    }, 0);
+    return () => {
+      done = true;
+      window.clearTimeout(id);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [armed]);
+  return null;
+}
+
 /** Releases the room's shared textures and materials with the canvas. */
 function KitLifetime() {
   useEffect(() => () => kit.disposeKit(), []);
@@ -498,6 +540,7 @@ export default function TurntableScene({
   resetSignal,
   onScrub,
   onMicroActive,
+  onReady,
   insetRight = 0,
 }: Props) {
   const cafe = environment === "cafe";
@@ -507,6 +550,7 @@ export default function TurntableScene({
     return q;
   }, []);
   const [microActive, setMicroActive] = useState(false);
+  const [roomBuilt, setRoomBuilt] = useState(false);
   const handleMicro = (active: boolean) => {
     setMicroActive(active);
     onMicroActive(active);
@@ -528,7 +572,7 @@ export default function TurntableScene({
       <color attach="background" args={[cafe ? "#120d09" : "#0c0c10"]} />
       <KitLifetime />
       {cafe ? (
-        <ListeningRoom quality={quality} />
+        <ListeningRoom quality={quality} onBuilt={() => setRoomBuilt(true)} />
       ) : (
         <>
           <EnvironmentReflections intensity={0.4} />
@@ -568,6 +612,7 @@ export default function TurntableScene({
         follow={follow}
         insetRight={insetRight}
       />
+      <WarmUp armed={!cafe || roomBuilt} onReady={onReady} />
       {import.meta.env.DEV && <DevCapture />}
     </Canvas>
   );

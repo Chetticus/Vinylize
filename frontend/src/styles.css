@@ -748,6 +748,61 @@ canvas.waveform {
   overflow: hidden;
 }
 
+/* Loading curtain over the plate while the room is painted and compiled. */
+.groove-loading {
+  position: absolute;
+  inset: 10px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 28px;
+  background: var(--grain), radial-gradient(circle at 50% 45%, #1d1510, var(--night) 70%);
+  background-blend-mode: soft-light, normal;
+  color: var(--night-text);
+  transition: opacity 0.6s ease;
+}
+.groove-loading.lifted { opacity: 0; pointer-events: none; }
+.loading-disc {
+  flex: none;
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at center, #0a0806 0 4px, var(--spot) 4px 30px, #0a0806 30px 34px, transparent 34px),
+    repeating-radial-gradient(circle at center, #1a1410 0 2px, #2a2119 2px 3px);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7), inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+  position: relative;
+  /* 33⅓ rpm, a real record's speed. */
+  animation: spin 1.8s linear infinite;
+}
+.loading-disc::after {
+  /* A sheen that stays put while the disc turns underneath it. */
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: conic-gradient(from 20deg, transparent 0 40deg, rgba(255, 236, 210, 0.08) 60deg, transparent 80deg 220deg, rgba(255, 236, 210, 0.05) 240deg, transparent 260deg);
+  animation: spin 1.8s linear infinite reverse;
+}
+.loading-copy { display: flex; flex-direction: column; gap: 8px; min-width: 230px; }
+.loading-copy b { font-family: var(--display); font-size: 22px; font-weight: 600; font-style: italic; }
+.loading-kicker,
+.loading-note {
+  font-family: var(--label);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--brass-lit);
+}
+.loading-note { color: var(--ink-faint); letter-spacing: 0.08em; }
+@media (prefers-reduced-motion: reduce) {
+  .loading-disc, .loading-disc::after { animation: none; }
+}
+@media (max-width: 560px) {
+  .groove-loading { flex-direction: column; text-align: center; }
+}
+
 /* Overlays inside the plate speak the dark room's language. The controls
    are an index card clipped to the plate's corner: solid stock with a brass
    rule across its head, no frosted glass, and it folds away. */
