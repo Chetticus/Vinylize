@@ -72,6 +72,10 @@ def analyze(
     # Loudest / quietest via 0.5 s RMS windows.
     win_rms = max(int(0.5 * sample_rate), 1)
     sq_env = uniform_filter1d(mono_orig**2, size=win_rms, mode="nearest")
+    # A running mean over digital silence can land a hair below zero from
+    # floating-point cancellation (a track with a silent intro did exactly
+    # that and crashed the log below), so clamp: power is never negative.
+    np.maximum(sq_env, 0.0, out=sq_env)
     # Exclude the half-window edges where the average is padded with zeros.
     core = slice(win_rms // 2, max(n - win_rms // 2, win_rms // 2 + 1))
     loudest_s = (core.start + int(np.argmax(sq_env[core]))) / sample_rate
