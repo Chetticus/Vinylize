@@ -16,8 +16,10 @@ import { rng } from "./noise";
 import type { Quality } from "./quality";
 import { useGeo, useGeoSet } from "./useGeo";
 
-export const CHAIR = { x: -1330, z: 560, rotY: 2.05 };
-export const SIDE_TABLE = { x: -1730, z: -40, top: FLOOR_Y + 540 };
+export const CHAIR = { x: -1200, z: 700, rotY: 2.05 };
+// Clear of the bookshelf (its front face is at z = -84) and of the chair's
+// left arm, with the lamp between the chair and the shelf.
+export const SIDE_TABLE = { x: -1900, z: 260, top: FLOOR_Y + 540 };
 /** Where the lamp's bulb sits (for RoomLights). */
 export const LAMP_BULB: [number, number, number] = [SIDE_TABLE.x + 70, SIDE_TABLE.top + 400, SIDE_TABLE.z - 60];
 
@@ -340,7 +342,7 @@ export default function Corner({ quality }: { quality: Quality }) {
       <Rug />
       <Chair />
       <SideTable quality={quality} />
-      <BookPile position={[-1110, FLOOR_Y + 8, 900]} seed={17} count={quality === "low" ? 2 : 4} rotY={0.3} />
+      <BookPile position={[-1900, FLOOR_Y + 5, 700]} seed={17} count={quality === "low" ? 2 : 4} rotY={0.3} />
     </group>
   );
 }

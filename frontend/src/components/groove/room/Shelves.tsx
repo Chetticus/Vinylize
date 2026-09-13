@@ -286,7 +286,8 @@ function Crate() {
   useInstances(ref, items);
   const unit = useGeo(() => new THREE.BoxGeometry(1, 1, 1));
   return (
-    <group position={[CONSOLE.x0 - 320, FLOOR_Y + 5, 80]} rotation={[0, 0.28, 0]}>
+    // In the 370 mm gap between the bookshelf and the console, clear of both.
+    <group position={[CONSOLE.x0 - 185, FLOOR_Y + 5, -150]} rotation={[0, 0.02, 0]}>
       <mesh geometry={g} material={kit.pine()} castShadow receiveShadow />
       <instancedMesh ref={ref} args={[unit, kit.card(), items.length]} castShadow receiveShadow />
       <Blob x={0} y={0} z={0} w={520} d={500} strength={0.6} />
