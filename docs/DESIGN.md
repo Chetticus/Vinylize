@@ -883,3 +883,41 @@ overruled it is worth less than one that does.
     light contrast exists — they are the close-range garnish; wobble, strobe dots and
     label do the heavy lifting at overview. The old translucent sheen overlay was
     removed as superseded.
+
+19. **v0.11: the listening room.** The café was replaced by a private listening room
+    above a record shop, photographed in the last hour of daylight
+    (`frontend/src/components/groove/room/`). Findings and decisions:
+    *(a) Why the café looked flat:* the scene is in millimetres, and three's physical
+    point/spot falloff is intensity / distance² in scene units — a "1 cd" lamp 700 mm
+    away contributes nothing. Practical lights are now specified as candela × 10⁶, the
+    sun is a directional key that only enters through the window (walls cast shadows,
+    so the mullions print across the console and record), a rect-area fill comes from
+    the glass, a pendant spot gives the tonearm a shadow on the vinyl, and a reading
+    lamp warms the chair. Fog is gone. *(b) Reflections:* a tiny stand-in of the room
+    (window, pendant and lamp glow, dark walls) is PMREM-filtered once. Measured by
+    toggling lights one at a time: the rect light and a bright environment each washed
+    the black vinyl to copper, so both are deliberately weak; the sun alone gives the
+    record its gleam. *(c) Materials:* every texture is painted from a seed in
+    `textures.ts` — walnut/oak/pine grain along each board's long axis (UVs projected in
+    world mm, so grain never stretches), one unrepeated console top with a worn front
+    edge, one old cup ring and a few sleeve-edge scratches, plaster, floorboards with
+    end joints, a flat-weave rug, pebbled leather, twill throw, brushed metals, speckled
+    glaze, card stock, a notebook page, rain and condensation, a dusk sky and softened
+    rooftops, and a framed print that is a computed RIAA curve. Sleeve fronts are plain
+    geometric compositions — no text, no brands, nothing generated. Textures and
+    materials are cached in `kit.ts` for the life of the canvas and disposed with it
+    (GPU texture and geometry counts stayed flat across repeated Studio ⇄ Room toggles).
+    *(d) Cost:* nothing in the room runs per frame except a 12 Hz shadow refresh; books,
+    records and leaves are instanced; ~135 draw calls, ~86k triangles at overview.
+    *(e) Camera:* the overview is an interior three-quarter from standing height; the
+    inspection card's width is fed to the camera as a film offset, so the subject
+    centres in the visible part of the canvas without breaking picking; narrow or
+    portrait canvases pull the overview back and re-centre on the deck; orbit is fenced
+    by angles plus a clamp to the room box and out of the console. The record surface
+    stops receiving shadows under the microscope, where a room-sized shadow map's
+    texels printed as blocks across the grooves. *(f) Quality tiers* (`quality.ts`) are
+    chosen from cores, memory, pointer type and the GPU renderer string, not screen
+    width (`?quality=high|medium|low` overrides). *(g) Tooling:* `DevCapture.tsx`
+    (dev builds only) renders exact frames at a fixed size and posts them to a local
+    receiver, which is how every iteration — and the before/after images in
+    `docs/screenshots` — was inspected.

@@ -34,18 +34,46 @@ export interface CameraPose {
   target: [number, number, number];
 }
 
-/** Whole-turntable framing: a close three-quarter product shot — the deck
- * fills ~75% of the frame at fov 34, record as the focal point. */
+/** Studio framing: a three-quarter product shot — the whole deck fits the
+ * frame left of the inspection card at fov 34. */
 export const OVERVIEW_POSE: CameraPose = {
-  position: [215, 150, 265],
+  position: [430, 340, 600],
   target: [25, -22, -18],
 };
 
+/** Listening-room framing: an interior photograph from standing height
+ * near the room's open side — deck dominant, window and collection behind,
+ * the reading chair at the left edge. */
+export const ROOM_OVERVIEW_POSE: CameraPose = {
+  position: [820, 340, 760],
+  target: [-190, -40, -100],
+};
+
+/** Pull an overview back along its line of sight for narrow or portrait
+ * canvases, so the deck still fits the frame's width (tablets, phones). */
+function fitToAspect(pose: CameraPose, aspect: number): CameraPose {
+  const k = Math.min(1.6, Math.max(1, Math.pow(1.5 / Math.max(aspect, 0.3), 0.7)));
+  if (k === 1) return pose;
+  // Narrow frames also re-centre on the deck itself (plinth centre).
+  const s = 1 - Math.min(1, aspect / 1.5);
+  const [tx, ty, tz] = pose.target.map((v, i) => v + ([35, -20, -10][i] - v) * s);
+  const [px, py, pz] = pose.position.map((v, i) => v + ([35, -20, -10][i] - pose.target[i]) * s);
+  return {
+    position: [tx + (px - tx) * k, ty + (py - ty) * k, tz + (pz - tz) * k],
+    target: [tx, ty, tz],
+  };
+}
+
 /** Preset camera pose for a mode, aimed at the current stylus contact. */
-export function poseFor(mode: LodMode, contact: { x: number; z: number }): CameraPose {
+export function poseFor(
+  mode: LodMode,
+  contact: { x: number; z: number },
+  room = false,
+  aspect = 16 / 9,
+): CameraPose {
   switch (mode) {
     case "overview":
-      return OVERVIEW_POSE;
+      return fitToAspect(room ? ROOM_OVERVIEW_POSE : OVERVIEW_POSE, aspect);
     case "closeup":
       // Individual turns resolve; the groove band fills the frame.
       return {

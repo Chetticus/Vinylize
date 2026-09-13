@@ -748,37 +748,107 @@ canvas.waveform {
   overflow: hidden;
 }
 
-/* Overlays inside the plate speak the dark room's language. */
+/* Overlays inside the plate speak the dark room's language. The controls
+   are an index card clipped to the plate's corner: solid stock with a brass
+   rule across its head, no frosted glass, and it folds away. */
 .groove-panel {
   position: absolute;
   top: 20px;
   right: 20px;
-  width: 178px;
-  background: rgba(23, 17, 13, 0.9);
+  width: 158px;
+  background: var(--grain), linear-gradient(#1b140f, #130e0a);
+  background-blend-mode: soft-light, normal;
   border: 1px solid var(--night-rule);
-  padding: 14px 15px;
-  backdrop-filter: blur(4px);
+  border-top: 2px solid var(--brass);
+  box-shadow: 3px 3px 0 rgba(0, 0, 0, 0.45);
   display: flex;
   flex-direction: column;
-  gap: 14px;
   max-height: calc(100% - 40px);
-  overflow-y: auto;
   color: var(--night-text);
 }
+.groove-panel.collapsed { width: auto; }
+.panel-head {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  width: 100%;
+  min-height: 32px;
+  padding: 7px 12px;
+  background: none;
+  border: none;
+  color: var(--brass-lit);
+  font-family: var(--label);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.panel-head:hover { color: var(--night-text); }
+.panel-head:focus-visible { outline: 1px solid var(--brass-lit); outline-offset: -3px; }
+.panel-caret { font-size: 14px; line-height: 1; font-weight: 400; }
+.panel-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 2px 12px 14px;
+  overflow-y: auto;
+  border-top: 1px solid var(--night-rule);
+}
 .groove-panel h4 {
-  margin: 0 0 8px;
+  margin: 8px 0 4px;
   font-family: var(--label);
   font-size: 9px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.18em;
-  color: var(--brass-lit);
+  color: var(--ink-faint);
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
-.groove-panel .panel-section { display: flex; flex-direction: column; gap: 6px; }
+.groove-panel h4::after { content: ""; flex: 1; height: 1px; background: var(--night-rule); }
+.groove-panel .panel-section { display: flex; flex-direction: column; gap: 5px; }
 .groove-panel .btn {
   border-color: var(--night-rule);
   color: var(--night-text);
-  padding: 6px 10px;
+  padding: 5px 9px;
+}
+.groove-panel .panel-index { display: flex; align-items: baseline; gap: 6px; }
+.groove-panel .panel-index .idx {
+  width: 16px;
+  font-family: var(--display);
+  font-style: italic;
+  font-size: 11px;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--brass-lit);
+}
+.groove-panel .panel-index:hover .idx { color: inherit; }
+.panel-link {
+  appearance: none;
+  align-self: flex-start;
+  margin-top: 2px;
+  padding: 3px 0;
+  background: none;
+  border: none;
+  border-bottom: 1px dotted var(--night-rule);
+  font-family: var(--label);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+.panel-link:hover { color: var(--night-text); border-bottom-color: var(--brass); }
+@media (pointer: coarse) {
+  .groove-panel .btn, .panel-check, .panel-link { min-height: 40px; }
+  .panel-head { min-height: 44px; }
+}
+@media (max-width: 760px) {
+  .groove-panel { top: 12px; right: 12px; }
+  .groove-hud { left: 12px; right: 12px; bottom: 12px; max-width: none; }
 }
 .groove-panel .btn:hover:not(:disabled) { background: var(--night-text); color: var(--night); }
 .groove-panel .btn.active { background: var(--brass); border-color: var(--brass); color: #1a1409; }
@@ -816,7 +886,6 @@ canvas.waveform {
   line-height: 1.65;
   color: rgba(217, 205, 182, 0.86);
   max-width: 430px;
-  backdrop-filter: blur(4px);
 }
 .groove-hud b { color: var(--night-text); font-weight: 600; }
 .hud-close {
@@ -839,7 +908,6 @@ canvas.waveform {
   background: rgba(23, 17, 13, 0.9);
   border-color: var(--night-rule);
   color: var(--night-text);
-  backdrop-filter: blur(4px);
 }
 .hud-reopen:hover { background: var(--night-text); color: var(--night); }
 
@@ -871,7 +939,6 @@ canvas.waveform {
   letter-spacing: 0.05em;
   line-height: 1.5;
   color: #d5ab5c;
-  backdrop-filter: blur(4px);
 }
 
 /* ====================== transport: a hi-fi faceplate ==================== */

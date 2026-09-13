@@ -30,6 +30,7 @@
 
 import { useRef } from "react";
 import { useFrame } from "@react-three/fiber";
+import { RoundedBox } from "@react-three/drei";
 import * as THREE from "three";
 
 import type { GrooveGeometry } from "../../types/api";
@@ -127,10 +128,9 @@ export default function Tonearm({ geometry, view, microscope = false, debug = fa
         {/* ============ TonearmAssembly (yaw only) ============ */}
         <group ref={assembly}>
           {/* Bearing housing + gimbal */}
-          <mesh castShadow position={[0, 1.5, 0]}>
-            <boxGeometry args={[11, 9, 11]} />
+          <RoundedBox args={[11, 9, 11]} radius={1.6} smoothness={3} castShadow position={[0, 1.5, 0]}>
             <meshStandardMaterial color="#2b2b33" metalness={0.7} roughness={0.35} />
-          </mesh>
+          </RoundedBox>
           <mesh castShadow>
             <cylinderGeometry args={[5.5, 5.5, 12, 20]} />
             <meshStandardMaterial color="#3a3a42" metalness={0.75} roughness={0.3} />
@@ -160,10 +160,11 @@ export default function Tonearm({ geometry, view, microscope = false, debug = fa
 
           {/* ================= headshell ================= */}
           <group position={[216, -5, 0]}>
-            <mesh castShadow position={[0, 2, 0]}>
-              <boxGeometry args={[26, 3.5, 13]} />
-              <meshStandardMaterial color="#23232a" metalness={0.55} roughness={0.4} />
-            </mesh>
+            {/* Headshell: a softened alloy plate, satin so it catches an edge
+                highlight rather than reading as a black block. */}
+            <RoundedBox args={[26, 3.5, 13]} radius={1.2} smoothness={3} castShadow position={[0, 2, 0]}>
+              <meshStandardMaterial color="#8d8b86" metalness={0.85} roughness={0.34} />
+            </RoundedBox>
             {/* Finger lift */}
             <mesh position={[-11, 4.5, 5.5]} rotation={[0.5, 0, 0]}>
               <cylinderGeometry args={[0.8, 0.8, 9, 8]} />
@@ -172,9 +173,13 @@ export default function Tonearm({ geometry, view, microscope = false, debug = fa
 
             {/* ================= cartridge ================= */}
             <group position={[5, -4, 0]}>
-              <mesh castShadow>
-                <boxGeometry args={[11, 7, 9]} />
-                <meshStandardMaterial color="#5a4632" roughness={0.55} />
+              {/* Cartridge body: deep oxblood lacquer with a brushed nose plate. */}
+              <RoundedBox args={[11, 7, 9]} radius={1} smoothness={3} castShadow>
+                <meshPhysicalMaterial color="#3a1714" roughness={0.4} clearcoat={0.8} clearcoatRoughness={0.2} />
+              </RoundedBox>
+              <mesh position={[5.6, -0.4, 0]}>
+                <boxGeometry args={[0.6, 5.2, 7.6]} />
+                <meshStandardMaterial color="#c9c4ba" metalness={0.9} roughness={0.3} />
               </mesh>
 
               {/* ============ cantilever (compliance) ============ */}

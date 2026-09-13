@@ -39,13 +39,18 @@ geometric idea:
   independently toggleable, every parameter scaled from measured real-world values.
 - **Sample-synced A/B**: original and vinyl play simultaneously; switching flips gains, so
   the only thing that changes is the physics.
-- **3D turntable in a night café**: a complete deck — plinth, platter, vinyl with a
-  procedural label carrying your filename, and a fully articulated tonearm (pivot, tube,
-  counterweight, headshell, cartridge, cantilever, stylus) — sitting on a walnut table in
-  a warm, softly-lit listening room (pendant lamps, record shelf, espresso-bar
-  silhouette, rainy window with city-light bokeh). The backdrop is pure low-poly
-  procedural geometry melted into defocus by atmospheric fog — no 3D assets, no
-  postprocessing pass — and a toggle switches back to a minimal dark studio.
+- **3D turntable in a listening room**: a complete deck — walnut plinth, satin deck
+  plate, machined platter and mat, vinyl with a procedural label carrying your filename,
+  and a fully articulated tonearm (pivot, tube, counterweight, headshell, cartridge,
+  cantilever, stylus) — on a walnut console in a private room above a record shop, in
+  the last hour of daylight: low sun through a rain-streaked window, bookshelf speakers,
+  a small amplifier, headphones on a stand, a leather reading chair with a lamp, a
+  shelf and crate of records, and the owner's half-finished coffee. Everything is built
+  in code — geometry from rounded boxes, lathes and swept tubes, and every surface
+  (walnut grain, plaster, woven rug, leather, brushed metal, speckled glaze, rain on
+  glass, abstract sleeve designs) painted procedurally from seeds. No model files, no
+  image assets, no generated imagery. A toggle switches to a minimal dark studio.
+  Screenshots: [docs/screenshots](docs/screenshots).
 
 - **Multiscale groove microscope**: the record is rendered at TRUE scale across three
   levels of detail. From turntable distance the recorded band reads as satin (an

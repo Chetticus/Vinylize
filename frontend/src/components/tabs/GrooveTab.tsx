@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useStore } from "../../state/store";
 import { sectionAtTime, type ChannelView } from "../groove/grooveMath";
@@ -40,8 +40,36 @@ export default function GrooveTab() {
   const [fly, setFly] = useState<FlyRequest>({ mode: "overview", seq: 0 });
   const [resetSignal, setResetSignal] = useState(0);
   const [microActive, setMicroActive] = useState(false);
-  const [showHud, setShowHud] = useState(true);
+  const [showHud, setShowHud] = useState(() => !window.matchMedia?.("(max-width: 900px)").matches);
   const [readout, setReadout] = useState<Readout>({ timeS: 0, radiusMm: 0, status: "resting" });
+  // The card starts folded when the canvas is narrow, so the room isn't
+  // covered; once the listener opens or folds it, their choice stands.
+  const [panelOpen, setPanelOpen] = useState(() => !window.matchMedia?.("(max-width: 760px)").matches);
+  const panelToggled = useRef(false);
+  const panelRef = useRef<HTMLElement>(null);
+  const [panelInset, setPanelInset] = useState(0);
+
+  // Tell the camera how much of the canvas the card covers, so the subject
+  // is framed in the part left visible (see CameraRig's film offset).
+  useEffect(() => {
+    const el = panelRef.current;
+    const wrapEl = el?.parentElement;
+    if (!el || !wrapEl) return;
+    const measure = () => {
+      const wrap = wrapEl.getBoundingClientRect();
+      if (panelOpen && !panelToggled.current && wrap.width > 0 && wrap.width < 620) {
+        setPanelOpen(false);
+        return;
+      }
+      const r = el.getBoundingClientRect();
+      setPanelInset(!panelOpen || wrap.width < 700 ? 0 : Math.round(wrap.right - r.left));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    ro.observe(wrapEl);
+    return () => ro.disconnect();
+  }, [panelOpen, geometry]);
 
   const effectiveBoost = useMemo(
     () => (geometry ? safeAudioBoost(geometry, audioBoostReq) : audioBoostReq),
@@ -94,7 +122,7 @@ export default function GrooveTab() {
             className={`btn small${environment === "cafe" ? " active" : ""}`}
             onClick={() => setEnvironment("cafe")}
           >
-            ☕ Café
+            Listening room
           </button>
           <button
             className={`btn small${environment === "studio" ? " active" : ""}`}
@@ -131,70 +159,102 @@ export default function GrooveTab() {
           resetSignal={resetSignal}
           onScrub={seek}
           onMicroActive={setMicroActive}
+          insetRight={panelInset}
         />
 
-        {/* ------------- compact 3D control panel (top-right) ------------- */}
-        <div className="groove-panel">
-          <div className="panel-section">
-            <h4>View</h4>
-            {LOD_MODES.map(([mode, label, hint]) => (
-              <button key={mode} className="btn small block" title={hint} onClick={() => flyTo(mode)}>
-                {label}
-              </button>
-            ))}
-            <button
-              className="btn small block"
-              title="Re-frame the whole turntable"
-              onClick={() => setResetSignal((n) => n + 1)}
-            >
-              ⌂ Reset camera
-            </button>
-          </div>
-          <div className="panel-section">
-            <h4>Stereo encoding</h4>
-            {STEREO_VIEWS.map(([key, label, hint]) => (
-              <button
-                key={key}
-                className={`btn small block${view === key ? " active" : ""}`}
-                title={hint}
-                onClick={() => setView(key)}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-          <div className="panel-section">
-            <h4>Inspection</h4>
-            <label className="panel-check">
-              <input type="checkbox" checked={cutaway} onChange={(e) => setCutaway(e.target.checked)} />
-              Cutaway at stylus
-            </label>
-            <label className="panel-check">
-              <input type="checkbox" checked={guides} onChange={(e) => setGuides(e.target.checked)} />
-              Pitch guides
-            </label>
-            <label className="panel-check">
-              <input type="checkbox" checked={follow} onChange={(e) => setFollow(e.target.checked)} />
-              Follow stylus
-            </label>
-            <label className="panel-check">
-              <input type="checkbox" checked={freeze} onChange={(e) => setFreeze(e.target.checked)} />
-              Freeze record
-            </label>
-            <label className="panel-slider" title="Only the audio wiggle is magnified; pitch stays true">
-              Audio zoom ×{Math.round(effectiveBoost)}
-              {effectiveBoost < audioBoostReq - 1 && " (max)"}
-              <input
-                type="range"
-                min={25}
-                max={1000}
-                step={25}
-                value={audioBoostReq}
-                onChange={(e) => setAudioBoostReq(Number(e.target.value))}
-              />
-            </label>
-          </div>
-        </div>
+        {/* ------------- inspection card (top-right, collapsible) ------------- */}
+        <aside
+          ref={panelRef}
+          className={`groove-panel${panelOpen ? "" : " collapsed"}`}
+          aria-label="Inspection controls"
+        >
+          <button
+            className="panel-head"
+            onClick={() => {
+              panelToggled.current = true;
+              setPanelOpen((o) => !o);
+            }}
+            aria-expanded={panelOpen}
+            title={panelOpen ? "Fold the controls away" : "Show the inspection controls"}
+          >
+            <span>Inspect</span>
+            <span className="panel-caret" aria-hidden>
+              {panelOpen ? "−" : "+"}
+            </span>
+          </button>
+          {panelOpen && (
+            <div className="panel-body">
+              <div className="panel-section">
+                <h4>View</h4>
+                {LOD_MODES.map(([mode, label, hint], i) => (
+                  <button
+                    key={mode}
+                    className="btn small block panel-index"
+                    title={hint}
+                    onClick={() => flyTo(mode)}
+                  >
+                    <span className="idx" aria-hidden>
+                      {["i", "ii", "iii"][i]}
+                    </span>
+                    {label}
+                  </button>
+                ))}
+                <button
+                  className="panel-link"
+                  title="Re-frame the whole turntable"
+                  onClick={() => setResetSignal((n) => n + 1)}
+                >
+                  ⌂ Reset camera
+                </button>
+              </div>
+              <div className="panel-section">
+                <h4>Stereo encoding</h4>
+                {STEREO_VIEWS.map(([key, label, hint]) => (
+                  <button
+                    key={key}
+                    className={`btn small block${view === key ? " active" : ""}`}
+                    title={hint}
+                    aria-pressed={view === key}
+                    onClick={() => setView(key)}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <div className="panel-section">
+                <h4>Inspection</h4>
+                <label className="panel-check">
+                  <input type="checkbox" checked={cutaway} onChange={(e) => setCutaway(e.target.checked)} />
+                  Cutaway at stylus
+                </label>
+                <label className="panel-check">
+                  <input type="checkbox" checked={guides} onChange={(e) => setGuides(e.target.checked)} />
+                  Pitch guides
+                </label>
+                <label className="panel-check">
+                  <input type="checkbox" checked={follow} onChange={(e) => setFollow(e.target.checked)} />
+                  Follow stylus
+                </label>
+                <label className="panel-check">
+                  <input type="checkbox" checked={freeze} onChange={(e) => setFreeze(e.target.checked)} />
+                  Freeze record
+                </label>
+                <label className="panel-slider" title="Only the audio wiggle is magnified; pitch stays true">
+                  Audio zoom ×{Math.round(effectiveBoost)}
+                  {effectiveBoost < audioBoostReq - 1 && " (max)"}
+                  <input
+                    type="range"
+                    min={25}
+                    max={1000}
+                    step={25}
+                    value={audioBoostReq}
+                    onChange={(e) => setAudioBoostReq(Number(e.target.value))}
+                  />
+                </label>
+              </div>
+            </div>
+          )}
+        </aside>
 
         {/* ------------- closeable readout HUD (bottom-left) ------------- */}
         {showHud ? (

@@ -28,6 +28,9 @@ import { timeAtLocalPoint } from "./grooveMath";
 interface Props {
   geometry: GrooveGeometry;
   onScrub: (t: number) => void;
+  /** Off under the microscope: at millimetre range a room-sized shadow
+   * map's texels would print as blocks across the grooves. */
+  receiveShadow?: boolean;
 }
 
 function makePolarRing(): THREE.RingGeometry {
@@ -50,7 +53,7 @@ function makePolarRing(): THREE.RingGeometry {
   return geo;
 }
 
-export default function RecordSurface({ geometry, onScrub }: Props) {
+export default function RecordSurface({ geometry, onScrub, receiveShadow = true }: Props) {
   const ringGeo = useMemo(() => makePolarRing(), []);
   const surface = useMemo(() => makeVinylSurfaceMaterial(geometry), [geometry]);
   useEffect(
@@ -79,7 +82,7 @@ export default function RecordSurface({ geometry, onScrub }: Props) {
       rotation={[-Math.PI / 2, 0, 0]}
       geometry={ringGeo}
       material={surface.material}
-      receiveShadow
+      receiveShadow={receiveShadow}
       onClick={handleClick}
     />
   );

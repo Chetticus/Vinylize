@@ -24,9 +24,10 @@ import { OrbitControls } from "@react-three/drei";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import * as THREE from "three";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
+import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
 
 import type { GrooveGeometry } from "../../types/api";
-import CafeEnvironment from "./CafeEnvironment";
+import DevCapture, { EagerResizeObserver } from "./DevCapture";
 import GrooveInspectionMesh, { MicroStylus } from "./GrooveInspectionMesh";
 import RecordSurface from "./RecordSurface";
 import Tonearm from "./Tonearm";
@@ -35,11 +36,17 @@ import {
   MICRO_ENTER_MM,
   MICRO_EXIT_MM,
   OVERVIEW_POSE,
+  ROOM_OVERVIEW_POSE,
   poseFor,
   type LodMode,
 } from "./grooveLod";
 import { makeLabelTexture } from "./labelTexture";
 import { clipTime, contact, discAngle } from "./recordMotion";
+import ListeningRoom from "./room/ListeningRoom";
+import { projectUV } from "./room/geom";
+import * as kit from "./room/kit";
+import { CAMERA_BOUNDS, CONSOLE } from "./room/layout";
+import { detectQuality } from "./room/quality";
 
 export type EnvironmentKind = "cafe" | "studio";
 
@@ -65,6 +72,9 @@ interface Props {
   resetSignal: number;
   onScrub: (t: number) => void;
   onMicroActive: (active: boolean) => void;
+  /** Width (px) of UI overlaying the canvas's right edge; the camera's
+   * frame is shifted so the subject centres in the unobstructed part. */
+  insetRight?: number;
 }
 
 /**
@@ -147,11 +157,13 @@ function Record({
   geometry,
   filename,
   onScrub,
+  microscope,
   children,
 }: {
   geometry: GrooveGeometry;
   filename: string;
   onScrub: (t: number) => void;
+  microscope: boolean;
   children?: React.ReactNode;
 }) {
   const labelTex = useMemo(() => makeLabelTexture(filename), [filename]);
@@ -173,7 +185,7 @@ function Record({
           envMapIntensity={1.25}
         />
       </mesh>
-      <RecordSurface geometry={geometry} onScrub={onScrub} />
+      <RecordSurface geometry={geometry} onScrub={onScrub} receiveShadow={!microscope} />
       {/* Label (wobbles with the record — it is printed on it; the spindle
           lives in Deck, centered, since the record wobbles AROUND it). */}
       <mesh position={[0, 0.2, 0]}>
@@ -198,43 +210,87 @@ function SpinningPlatter({ children }: { children: React.ReactNode }) {
   return <group ref={ref}>{children}</group>;
 }
 
+/** Plinth, feet, platter and controls. Dimensions are unchanged from the
+ * physics layout (plinth top y = -16.4, feet on y = -54.4, platter top
+ * y = -4.4); only construction and materials carry the detail: a walnut
+ * body under a satin metal deck plate, machined aluminium platter with a
+ * rubber mat, and a start button whose surround is worn glossy by use. */
 function Deck() {
+  const g = useMemo(() => {
+    const body = new RoundedBoxGeometry(560, 26, 420, 3, 4);
+    const plate = new RoundedBoxGeometry(552, 5.4, 412, 2, 1.6);
+    // Brushing at true scale: one texture repeat per ~180 mm.
+    projectUV(plate, "x", [180, 180]);
+    return { body, plate };
+  }, []);
+  useEffect(
+    () => () => {
+      g.body.dispose();
+      g.plate.dispose();
+    },
+    [g],
+  );
   return (
     <group>
-      {/* Plinth: satin charcoal (not pure black) so the deck separates from
-          both the walnut table below and the vinyl above. */}
-      <mesh receiveShadow position={[35, -31.4, -10]}>
-        <boxGeometry args={[560, 30, 420]} />
-        <meshStandardMaterial color="#232329" roughness={0.55} metalness={0.35} envMapIntensity={0.6} />
-      </mesh>
-      {/* Brushed top edge strip for a machined feel. */}
-      <mesh position={[35, -16.2, -10]}>
-        <boxGeometry args={[562, 1.2, 422]} />
-        <meshStandardMaterial color="#3a3b42" roughness={0.3} metalness={0.85} envMapIntensity={0.8} />
-      </mesh>
+      {/* Walnut body with a satin, faintly brushed deck plate on top: three
+          distinct materials (wood / painted metal / vinyl) stack upward. */}
+      <mesh geometry={g.body} material={kit.walnut()} castShadow receiveShadow position={[35, -35.4, -10]} />
+      <mesh geometry={g.plate} material={kit.deckPlate()} castShadow receiveShadow position={[35, -19.1, -10]} />
       {[
         [-215, -190],
         [285, -190],
         [-215, 170],
         [285, 170],
       ].map(([x, z]) => (
-        <mesh key={`${x},${z}`} position={[x, -50.4, z]}>
-          <cylinderGeometry args={[9, 10, 8, 20]} />
-          <meshStandardMaterial color="#101013" roughness={0.5} metalness={0.3} />
+        <group key={`${x},${z}`} position={[x, -50.4, z]}>
+          <mesh castShadow>
+            <cylinderGeometry args={[12, 14, 5, 24]} />
+            <meshStandardMaterial color="#8c8a86" metalness={0.9} roughness={0.35} />
+          </mesh>
+          <mesh position={[0, -3, 0]}>
+            <cylinderGeometry args={[13, 13, 2.2, 24]} />
+            <meshStandardMaterial color="#141313" roughness={0.9} />
+          </mesh>
+        </group>
+      ))}
+      {/* Start/stop and speed buttons, front left of the plate. */}
+      {[
+        [-196, 168, 13, "#bdb8ae"],
+        [-160, 172, 8, "#8e8a82"],
+        [-136, 173, 8, "#8e8a82"],
+      ].map(([x, z, r, c], i) => (
+        <mesh key={i} position={[x as number, -14.9, z as number]} castShadow>
+          <cylinderGeometry args={[r as number, (r as number) + 0.6, 3.2, 32]} />
+          <meshStandardMaterial color={c as string} metalness={0.9} roughness={i === 0 ? 0.22 : 0.34} />
         </mesh>
       ))}
-      {/* Platter assembly SPINS: dark charcoal metal — deliberately NOT the
-          record's black, so the disc reads as an object sitting on it. The
+      <mesh position={[-196, -16.33, 168]} rotation={[-Math.PI / 2, 0, 0]}>
+        <ringGeometry args={[13.5, 24, 40]} />
+        {/* Handling wear: the plate around the button is rubbed smoother. */}
+        <meshStandardMaterial color="#5a5852" metalness={0.8} roughness={0.2} transparent opacity={0.35} depthWrite={false} />
+      </mesh>
+      {/* Dust-cover hinges at the back edge. */}
+      {[-150, 220].map((x) => (
+        <mesh key={x} position={[x, -24, -222]} castShadow>
+          <boxGeometry args={[44, 18, 10]} />
+          <meshStandardMaterial color="#1c1b1a" metalness={0.4} roughness={0.45} />
+        </mesh>
+      ))}
+      {/* Platter assembly SPINS: machined aluminium rim (the circumferential
+          brushing reads as rotation), a rubber mat under the record. The
           platter turns dead-centered; the record wobbles around it. */}
       <SpinningPlatter>
-        <mesh castShadow receiveShadow position={[0, -10.4, 0]}>
-          <cylinderGeometry args={[158, 158, 12, 96]} />
-          <meshStandardMaterial color="#33343a" metalness={0.8} roughness={0.32} envMapIntensity={0.9} />
+        <mesh castShadow receiveShadow position={[0, -11.4, 0]} material={kit.brushedAlu()}>
+          <cylinderGeometry args={[158, 157, 10, 128]} />
         </mesh>
-        {/* Polished rim ring. */}
-        <mesh position={[0, -4.6, 0]}>
-          <cylinderGeometry args={[158.2, 158.2, 1.4, 96]} />
-          <meshStandardMaterial color="#8b8d94" metalness={0.95} roughness={0.18} envMapIntensity={1.1} />
+        <mesh position={[0, -5.4, 0]} receiveShadow>
+          <cylinderGeometry args={[149, 149, 2, 96]} />
+          <meshStandardMaterial color="#1a1918" roughness={0.92} />
+        </mesh>
+        {/* Polished chamfer ring on the rim's top edge. */}
+        <mesh position={[0, -6.6, 0]}>
+          <cylinderGeometry args={[157.2, 158.4, 1.2, 128]} />
+          <meshStandardMaterial color="#d8d6d0" metalness={1} roughness={0.12} envMapIntensity={1.2} />
         </mesh>
         {/* Spindle: centered on the platter axis; the eccentric record
             wobbles around it, exactly like a mis-punched pressing (the
@@ -254,14 +310,52 @@ function CameraRig({
   resetSignal,
   fly,
   follow,
+  insetRight,
 }: {
   environment: EnvironmentKind;
   resetSignal: number;
   fly: FlyRequest;
   follow: boolean;
+  insetRight: number;
 }) {
   const controls = useRef<OrbitControlsImpl>(null);
-  const camera = useThree((s) => s.camera);
+  const camera = useThree((s) => s.camera) as THREE.PerspectiveCamera;
+  const size = useThree((s) => s.size);
+  const room = environment === "cafe";
+
+  // Shift the frame (not the camera) so the subject centres in the part of
+  // the canvas the inspection panel leaves visible. filmOffset skews the
+  // projection, so orbiting, raycasts and scrubbing stay exact.
+  useEffect(() => {
+    camera.fov = room ? 38 : 34;
+    const inset = Math.min(insetRight, size.width * 0.45);
+    const aspect = size.width / Math.max(size.height, 1);
+    camera.filmOffset =
+      size.width > 0 ? (camera.getFilmWidth() * aspect * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * inset) / size.width : 0;
+    camera.updateProjectionMatrix();
+  }, [camera, room, insetRight, size.width, size.height]);
+
+  // Switching environment re-frames to that environment's overview.
+  const firstEnv = useRef(true);
+  useEffect(() => {
+    if (firstEnv.current) {
+      firstEnv.current = false;
+      return;
+    }
+    const c = controls.current;
+    if (!c) return;
+    const pose = poseFor("overview", contact, room, size.width / Math.max(size.height, 1));
+    anim.current = {
+      t: 0,
+      fromPos: camera.position.clone(),
+      fromTarget: c.target.clone(),
+      toPos: new THREE.Vector3(...pose.position),
+      toTarget: new THREE.Vector3(...pose.target),
+    };
+    c.target0.set(...pose.target);
+    c.position0.set(...pose.position);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [room]);
   const anim = useRef<{
     t: number;
     fromPos: THREE.Vector3;
@@ -271,7 +365,16 @@ function CameraRig({
   } | null>(null);
 
   useEffect(() => {
-    controls.current?.saveState();
+    // Start from the overview fitted to this canvas's shape, and make that
+    // the pose "Reset camera" returns to.
+    const c = controls.current;
+    if (!c) return;
+    const pose = poseFor("overview", contact, room, size.width / Math.max(size.height, 1));
+    camera.position.set(...pose.position);
+    c.target.set(...pose.target);
+    c.update();
+    c.saveState();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   useEffect(() => {
     if (resetSignal > 0) {
@@ -283,7 +386,7 @@ function CameraRig({
   // A new fly request captures start/end poses; user interaction cancels it.
   useEffect(() => {
     if (fly.seq === 0 || !controls.current) return;
-    const pose = poseFor(fly.mode, { x: contact.x, z: contact.z });
+    const pose = poseFor(fly.mode, { x: contact.x, z: contact.z }, room, size.width / Math.max(size.height, 1));
     anim.current = {
       t: 0,
       fromPos: camera.position.clone(),
@@ -297,6 +400,7 @@ function CameraRig({
     const c = controls.current;
     c.addEventListener("start", cancel);
     return () => c.removeEventListener("start", cancel);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fly.seq, fly.mode, camera]);
 
   useFrame((_, delta) => {
@@ -314,21 +418,41 @@ function CameraRig({
       c.target.lerp(new THREE.Vector3(contact.x, -0.1, contact.z), 0.06);
     }
     c.update();
+
+    if (room) {
+      // Keep the camera inside the room and out of the furniture: clamp to
+      // the room box, and never inside the console's body.
+      const p = camera.position;
+      p.x = THREE.MathUtils.clamp(p.x, CAMERA_BOUNDS.min[0], CAMERA_BOUNDS.max[0]);
+      p.y = THREE.MathUtils.clamp(p.y, CAMERA_BOUNDS.min[1], CAMERA_BOUNDS.max[1]);
+      p.z = THREE.MathUtils.clamp(p.z, CAMERA_BOUNDS.min[2], CAMERA_BOUNDS.max[2]);
+      const overConsole = p.x > CONSOLE.x0 - 30 && p.x < CONSOLE.x1 + 30 && p.z > CONSOLE.z0 && p.z < CONSOLE.z1 + 30;
+      if (overConsole && p.y < CONSOLE.top + 12) p.y = CONSOLE.top + 12;
+    }
   });
 
-  const cafe = environment === "cafe";
+  // Stable across environment switches (the switch animates instead).
+  const initial = useRef(room ? ROOM_OVERVIEW_POSE : OVERVIEW_POSE).current;
   return (
     <OrbitControls
       ref={controls}
-      target={OVERVIEW_POSE.target}
+      target={initial.target}
       minDistance={0.6}
-      maxDistance={cafe ? 750 : 900}
-      maxPolarAngle={Math.PI * 0.47}
-      minAzimuthAngle={cafe ? -0.9 : -Infinity}
-      maxAzimuthAngle={cafe ? 1.75 : Infinity}
+      maxDistance={room ? 2300 : 900}
+      minPolarAngle={room ? Math.PI * 0.18 : 0}
+      maxPolarAngle={Math.PI * (room ? 0.49 : 0.47)}
+      minAzimuthAngle={room ? -0.8 : -Infinity}
+      maxAzimuthAngle={room ? 1.05 : Infinity}
       enableDamping
+      makeDefault
     />
   );
+}
+
+/** Releases the room's shared textures and materials with the canvas. */
+function KitLifetime() {
+  useEffect(() => () => kit.disposeKit(), []);
+  return null;
 }
 
 function StudioLights() {
@@ -357,37 +481,6 @@ function StudioLights() {
   );
 }
 
-function CafeLights() {
-  return (
-    <group>
-      {/* Late-afternoon sun through the window (left wall): the warm key. */}
-      <directionalLight
-        castShadow
-        position={[-620, 460, 60]}
-        intensity={2.1}
-        color="#ffd9a8"
-        shadow-mapSize={[2048, 2048]}
-        shadow-camera-left={-560}
-        shadow-camera-right={560}
-        shadow-camera-top={560}
-        shadow-camera-bottom={-560}
-        shadow-camera-far={2200}
-        shadow-bias={-0.0004}
-      />
-      {/* Skylight fill: cool sky from above, warm wood bounce from below —
-          shadows fill naturally instead of dropping to black. */}
-      <hemisphereLight args={["#b9c8dd", "#4a3826", 0.6]} />
-      {/* Desk-lamp practical over the tonearm area (geometry in
-          CafeEnvironment) — keeps arm, headshell and stylus clearly lit. */}
-      <pointLight position={[330, 120, -60]} intensity={1.1} color="#ffc98a" distance={620} decay={1.7} />
-      {/* Near-pendant glow keeps moving specular life on the spinning vinyl. */}
-      <pointLight position={[-180, 150, 90]} intensity={0.6} color="#ffce96" distance={800} decay={1.7} />
-      {/* Cool rim from behind: separates the record from the room. */}
-      <directionalLight position={[60, 200, -460]} intensity={0.75} color="#d8e2f2" />
-    </group>
-  );
-}
-
 export default function TurntableScene({
   geometry,
   filename,
@@ -405,8 +498,14 @@ export default function TurntableScene({
   resetSignal,
   onScrub,
   onMicroActive,
+  insetRight = 0,
 }: Props) {
   const cafe = environment === "cafe";
+  const quality = useMemo(() => {
+    const q = detectQuality();
+    kit.setKitQuality(q);
+    return q;
+  }, []);
   const [microActive, setMicroActive] = useState(false);
   const handleMicro = (active: boolean) => {
     setMicroActive(active);
@@ -416,21 +515,29 @@ export default function TurntableScene({
   return (
     <Canvas
       shadows
-      camera={{ position: OVERVIEW_POSE.position, fov: 34, near: 0.05, far: 6000 }}
-      dpr={[1, 2]}
+      camera={{
+        position: cafe ? ROOM_OVERVIEW_POSE.position : OVERVIEW_POSE.position,
+        fov: cafe ? 38 : 34,
+        near: 0.05,
+        far: 14000,
+      }}
+      dpr={quality === "low" ? 1 : [1, quality === "high" ? 2 : 1.5]}
       gl={{ antialias: true, localClippingEnabled: true, logarithmicDepthBuffer: true }}
+      resize={import.meta.env.DEV ? { polyfill: EagerResizeObserver } : undefined}
     >
-      {/* Warm dusk backdrop; fog carries the depth-of-field feel (distant
-          set dressing melts into it) without a postprocessing pass. */}
-      <color attach="background" args={[cafe ? "#1a140d" : "#0c0c10"]} />
-      {cafe && <fog attach="fog" args={["#1c150e", 1000, 3200]} />}
-
-      <EnvironmentReflections intensity={cafe ? 0.55 : 0.4} />
-      {cafe ? <CafeLights /> : <StudioLights />}
-      {cafe && <CafeEnvironment />}
+      <color attach="background" args={[cafe ? "#120d09" : "#0c0c10"]} />
+      <KitLifetime />
+      {cafe ? (
+        <ListeningRoom quality={quality} />
+      ) : (
+        <>
+          <EnvironmentReflections intensity={0.4} />
+          <StudioLights />
+        </>
+      )}
 
       <Deck />
-      <Record geometry={geometry} filename={filename} onScrub={onScrub}>
+      <Record geometry={geometry} filename={filename} onScrub={onScrub} microscope={microActive}>
         {microActive && (
           <GrooveInspectionMesh
             sessionId={sessionId}
@@ -454,7 +561,14 @@ export default function TurntableScene({
       <Tonearm geometry={geometry} view={view} microscope={microActive} debug={debug} />
 
       <MicroGate onChange={handleMicro} />
-      <CameraRig environment={environment} resetSignal={resetSignal} fly={fly} follow={follow} />
+      <CameraRig
+        environment={environment}
+        resetSignal={resetSignal}
+        fly={fly}
+        follow={follow}
+        insetRight={insetRight}
+      />
+      {import.meta.env.DEV && <DevCapture />}
     </Canvas>
   );
 }
