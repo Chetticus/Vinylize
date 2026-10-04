@@ -17,7 +17,11 @@ import {
   loadExample,
   processAudio,
 } from "../api/client";
-import { PlaybackEngine, type PlaybackMode } from "../audio/playbackEngine";
+import {
+  PlaybackEngine,
+  type AcousticSpace,
+  type PlaybackMode,
+} from "../audio/playbackEngine";
 import {
   DEFAULT_CONFIG,
   type AnalyzeResponse,
@@ -27,7 +31,7 @@ import {
   type ProcessResponse,
 } from "../types/api";
 
-export type TabKey = "waveform" | "groove" | "compare" | "explorer";
+export type TabKey = "groove" | "explorer";
 
 export const engine = new PlaybackEngine();
 
@@ -64,6 +68,8 @@ interface SessionState {
   mode: PlaybackMode;
   positionS: number;
   volume: number;
+  acousticSpace: AcousticSpace;
+  cueing: boolean;
 
   upload: (file: File) => Promise<void>;
   useExample: (id: string) => Promise<void>;
@@ -80,29 +86,37 @@ interface SessionState {
   setMode: (mode: PlaybackMode) => void;
   seek: (s: number) => void;
   setVolume: (v: number) => void;
+  setAcousticSpace: (space: AcousticSpace) => void;
+  beginCue: () => void;
+  cueTo: (s: number) => void;
+  endCue: () => void;
   tick: () => void; // interval-driven position refresh
 }
 
 let lastProcessedKey = "";
+let resumeAfterCue = false;
 
-/** Client-side min/max peaks from a decoded buffer (for the vinyl waveform). */
-function computePeaks(buffer: AudioBuffer, buckets = 2000): { mins: number[]; maxs: number[] } {
-  const data = buffer.getChannelData(0);
-  const mins: number[] = [];
-  const maxs: number[] = [];
-  const per = Math.max(1, Math.floor(data.length / buckets));
-  for (let i = 0; i < data.length; i += per) {
-    let lo = Infinity;
-    let hi = -Infinity;
-    const end = Math.min(i + per, data.length);
-    for (let j = i; j < end; j++) {
-      if (data[j] < lo) lo = data[j];
-      if (data[j] > hi) hi = data[j];
-    }
-    mins.push(lo);
-    maxs.push(hi);
+interface PreparedRecord {
+  original: AudioBuffer;
+  vinyl: AudioBuffer;
+  geometry: GrooveGeometry;
+  result: ProcessResponse;
+  bytes: number;
+}
+
+// Bound decoded memory, rather than retaining every minutes-long song.
+const decodedCache = new Map<string, PreparedRecord>();
+const DECODED_BUDGET = 256 * 1024 * 1024;
+function cacheRecord(key: string, record: PreparedRecord) {
+  decodedCache.delete(key);
+  decodedCache.set(key, record);
+  let total = [...decodedCache.values()].reduce((sum, r) => sum + r.bytes, 0);
+  while (decodedCache.size > 2 || total > DECODED_BUDGET) {
+    const first = decodedCache.keys().next().value as string | undefined;
+    if (first === undefined) break;
+    total -= decodedCache.get(first)!.bytes;
+    decodedCache.delete(first);
   }
-  return { mins, maxs };
 }
 
 export const useStore = create<SessionState>((set, get) => {
@@ -113,6 +127,15 @@ export const useStore = create<SessionState>((set, get) => {
     if (!analysis) return;
     const key = analysis.session_id + JSON.stringify(config);
     if (key === lastProcessedKey && get().processResult) return;
+    const cached = decodedCache.get(key);
+    if (cached) {
+      decodedCache.delete(key); decodedCache.set(key, cached);
+      engine.setBuffers(cached.original, cached.vinyl);
+      lastProcessedKey = key;
+      set({ processResult: cached.result, geometry: cached.geometry,
+        loading: null, progressFrac: null, error: null, playing: false, positionS: 0 });
+      return;
+    }
 
     set({ loading: "Simulating vinyl playback…", progressFrac: 0, error: null });
 
@@ -147,24 +170,35 @@ export const useStore = create<SessionState>((set, get) => {
       // One throwaway AudioContext for decoding; playback creates its own on
       // first user gesture (browser autoplay policy).
       const ctx = new AudioContext();
-      const [originalBuf, vinylBuf, geometry] = await Promise.all([
-        fetchAudioBuffer(result.original_url, ctx),
-        fetchAudioBuffer(result.vinyl_url, ctx),
-        fetchGeometry(result.geometry_url, result.geometry),
-      ]);
-      void ctx.close();
+      const [originalBuf, vinylBuf, geometry] = await (async () => {
+        try {
+          return await Promise.all([
+            fetchAudioBuffer(result.original_url, ctx),
+            fetchAudioBuffer(result.vinyl_url, ctx),
+            fetchGeometry(result.geometry_url, result.geometry),
+          ]);
+        } finally {
+          await ctx.close();
+        }
+      })();
 
       const wasPlaying = get().playing;
       const pos = engine.position();
       engine.setBuffers(originalBuf, vinylBuf);
       if (wasPlaying) engine.play(pos); // keep listening position across re-process
 
+      cacheRecord(key, {
+        original: originalBuf, vinyl: vinylBuf, geometry, result,
+        bytes: (originalBuf.length * originalBuf.numberOfChannels +
+          vinylBuf.length * vinylBuf.numberOfChannels) * 4 + geometry.theta.byteLength * 5,
+      });
       lastProcessedKey = key;
       set({
         processResult: result,
         geometry,
-        vinylPeaks: computePeaks(vinylBuf),
-        originalPeaks: computePeaks(originalBuf),
+        // The comparison page was removed; no full-buffer peak scans needed.
+        vinylPeaks: null,
+        originalPeaks: null,
         loading: null,
         progressFrac: null,
         playing: wasPlaying,
@@ -185,6 +219,7 @@ export const useStore = create<SessionState>((set, get) => {
   /** Make `analysis` the active clip and (re)run the pipeline for it. */
   async function activate(analysis: AnalyzeResponse): Promise<void> {
     engine.stop();
+    resumeAfterCue = false;
     lastProcessedKey = "";
     set((s) => ({
       analysis,
@@ -197,6 +232,7 @@ export const useStore = create<SessionState>((set, get) => {
       vinylPeaks: null,
       originalPeaks: null,
       playing: false,
+      cueing: false,
       positionS: 0,
       loading: null,
     }));
@@ -204,7 +240,9 @@ export const useStore = create<SessionState>((set, get) => {
   }
 
   async function ingest(load: () => Promise<AnalyzeResponse>): Promise<void> {
-    set({ loading: "Analyzing audio…", error: null });
+    if (get().loading !== null) return;
+    resumeAfterCue = false;
+    set({ loading: "Analyzing audio…", error: null, playing: false, cueing: false });
     engine.stop();
     try {
       await activate(await load());
@@ -227,7 +265,7 @@ export const useStore = create<SessionState>((set, get) => {
     vinylPeaks: null,
     originalPeaks: null,
     config: { ...DEFAULT_CONFIG },
-    activeTab: "waveform",
+    activeTab: "groove",
     explorerFocus: null,
     offline: null,
     loading: null,
@@ -238,12 +276,23 @@ export const useStore = create<SessionState>((set, get) => {
     positionS: 0,
     // Unity is a clean A/B reference. Boost remains available up to 4x.
     volume: 1,
+    // Preserve the listening-room treatment as the sole acoustic space.
+    acousticSpace: "room",
+    cueing: false,
 
     upload: (file) => ingest(() => analyzeFile(file)),
     useDemo: () => ingest(loadDemo),
-    useExample: (id) => ingest(() => loadExample(id)),
+    useExample: async (id) => {
+      if (get().loading !== null) return;
+      const ex = get().examples.find((e) => e.id === id);
+      const name = ex?.artist ? `${ex.artist} — ${ex.title}` : ex?.title;
+      const previous = get().library.find((a) => a.filename === name);
+      if (previous) await activate(previous);
+      else await ingest(() => loadExample(id));
+    },
 
     selectSession: async (sessionId) => {
+      if (get().loading !== null) return;
       const entry = get().library.find((e) => e.session_id === sessionId);
       if (!entry || entry.session_id === get().analysis?.session_id) return;
       try {
@@ -272,7 +321,7 @@ export const useStore = create<SessionState>((set, get) => {
     clearExplorerFocus: () => set({ explorerFocus: null }),
 
     togglePlay: () => {
-      if (!engine.isReady) return;
+      if (!engine.isReady || get().cueing) return;
       if (get().playing) {
         engine.pause();
         set({ playing: false, positionS: engine.position() });
@@ -296,6 +345,32 @@ export const useStore = create<SessionState>((set, get) => {
     setVolume: (v) => {
       engine.setVolume(v);
       set({ volume: v });
+    },
+
+    setAcousticSpace: (space) => {
+      engine.setAcousticSpace(space);
+      set({ acousticSpace: space });
+    },
+
+    beginCue: () => {
+      if (!engine.isReady || get().cueing) return;
+      resumeAfterCue = get().playing;
+      if (resumeAfterCue) engine.pause();
+      set({ cueing: true, playing: false, positionS: engine.position() });
+    },
+
+    cueTo: (s) => {
+      if (!engine.isReady) return;
+      engine.seek(s);
+      set({ positionS: engine.position() });
+    },
+
+    endCue: () => {
+      if (!get().cueing) return;
+      const shouldResume = resumeAfterCue;
+      resumeAfterCue = false;
+      if (shouldResume) engine.play();
+      set({ cueing: false, playing: shouldResume, positionS: engine.position() });
     },
 
     tick: () => {

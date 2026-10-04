@@ -28,9 +28,9 @@
  * arm, that follows the modulation.
  */
 
-import { useRef } from "react";
-import { useFrame } from "@react-three/fiber";
-import { RoundedBox } from "@react-three/drei";
+import { useEffect, useMemo, useRef } from "react";
+import { useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
+import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
 import * as THREE from "three";
 
 import type { GrooveGeometry } from "../../types/api";
@@ -61,22 +61,128 @@ interface Props {
    * micro-stylus (GrooveInspectionMesh) can take over at the same spot. */
   microscope?: boolean;
   debug?: boolean;
+  cueEnabled?: boolean;
+  raised?: boolean;
+  onCueStart?: () => void;
+  onCueMove?: (timeS: number) => void;
+  onCueEnd?: () => void;
 }
 
-export default function Tonearm({ geometry, view, microscope = false, debug = false }: Props) {
+export default function Tonearm({
+  geometry,
+  view,
+  microscope = false,
+  debug = false,
+  cueEnabled = false,
+  raised = false,
+  onCueStart,
+  onCueMove,
+  onCueEnd,
+}: Props) {
   const assembly = useRef<THREE.Group>(null);
   const cantilever = useRef<THREE.Group>(null);
   const tipMesh = useRef<THREE.Mesh>(null);
   const debugTip = useRef<THREE.Mesh>(null);
   const debugTarget = useRef<THREE.Mesh>(null);
   const worldPos = useRef(new THREE.Vector3()).current;
+  const cuePlane = useRef(new THREE.Plane(new THREE.Vector3(0, 1, 0), 0)).current;
+  const cuePoint = useRef(new THREE.Vector3()).current;
+  const dragging = useRef(false);
+  const hovering = useRef(false);
+  const invalidate = useThree((s) => s.invalidate);
+  const gl = useThree((s) => s.gl);
+  const rounded = useMemo(() => ({
+    bearing: new RoundedBoxGeometry(11, 9, 11, 3, 1.6),
+    shell: new RoundedBoxGeometry(26, 3.5, 13, 3, 1.2),
+    cartridge: new RoundedBoxGeometry(11, 7, 9, 3, 1),
+  }), []);
+  useEffect(() => () => Object.values(rounded).forEach((g) => g.dispose()), [rounded]);
+
+  // A cancelled touch, lost capture, or window blur must release cue mode.
+  // Native fallback also covers releasing a captured drag outside the canvas.
+  useEffect(() => {
+    const finish = () => {
+      if (!dragging.current) return;
+      dragging.current = false;
+      document.body.style.cursor = "";
+      onCueEnd?.();
+      invalidate();
+    };
+    window.addEventListener("pointerup", finish);
+    window.addEventListener("blur", finish);
+    gl.domElement.addEventListener("pointercancel", finish);
+    gl.domElement.addEventListener("lostpointercapture", finish);
+    return () => {
+      window.removeEventListener("pointerup", finish);
+      window.removeEventListener("blur", finish);
+      gl.domElement.removeEventListener("pointercancel", finish);
+      gl.domElement.removeEventListener("lostpointercapture", finish);
+    };
+  }, [gl, onCueEnd, invalidate]);
+
+  useEffect(
+    () => () => {
+      if (hovering.current || dragging.current) document.body.style.cursor = "";
+    },
+    [],
+  );
+
+  const cueFromEvent = (e: ThreeEvent<PointerEvent>) => {
+    if (!e.ray.intersectPlane(cuePlane, cuePoint)) return;
+    const radiusMm = Math.hypot(cuePoint.x, cuePoint.z);
+    const pitchMm = geometry.meta.groove_pitch_um / 1000;
+    const turns = (geometry.meta.start_radius_mm - radiusMm) / pitchMm;
+    const durationS = geometry.timeS[geometry.timeS.length - 1] ?? 0;
+    // 33⅓ RPM = 100π/90 rad/s. A real tonearm selects by radius, so unlike
+    // clicking the groove we intentionally ignore the pointer's azimuth.
+    const omega = (Math.PI * 2 * (100 / 3)) / 60;
+    const timeS = THREE.MathUtils.clamp((turns * Math.PI * 2) / omega, 0, durationS);
+    onCueMove?.(timeS);
+  };
+
+  const handlePointerDown = (e: ThreeEvent<PointerEvent>) => {
+    if (!cueEnabled) return;
+    e.stopPropagation();
+    dragging.current = true;
+    document.body.style.cursor = "grabbing";
+    (e.target as Element).setPointerCapture?.(e.pointerId);
+    onCueStart?.();
+    cueFromEvent(e);
+    invalidate();
+  };
+
+  const handlePointerMove = (e: ThreeEvent<PointerEvent>) => {
+    if (!dragging.current) return;
+    e.stopPropagation();
+    cueFromEvent(e);
+  };
+
+  const handlePointerUp = (e: ThreeEvent<PointerEvent>) => {
+    if (!dragging.current) return;
+    e.stopPropagation();
+    cueFromEvent(e);
+    dragging.current = false;
+    document.body.style.cursor = hovering.current ? "grab" : "";
+    (e.target as Element).releasePointerCapture?.(e.pointerId);
+    onCueEnd?.();
+    invalidate();
+  };
 
   // (The pure-math kinematics self-check lives in GrooveTab, outside the
   // Canvas, so it runs even when WebGL frames are suspended.)
 
-  useFrame(() => {
+  useFrame((_, delta) => {
     const pose = solveStylusPose(ARM, geometry, view, clipTime());
-    if (assembly.current) assembly.current.rotation.y = pose.yaw;
+    if (assembly.current) {
+      assembly.current.rotation.y = pose.yaw;
+      const targetLift = dragging.current || raised ? 8 : 0;
+      assembly.current.position.y = THREE.MathUtils.lerp(
+        assembly.current.position.y,
+        targetLift,
+        1 - Math.exp(-12 * Math.min(delta, 0.05)),
+      );
+      if (Math.abs(assembly.current.position.y - targetLift) > 0.01) invalidate();
+    }
 
     // Publish the contact point (single writer — see recordMotion.contact).
     const tipR = Math.hypot(pose.tipX, pose.tipZ) || 1;
@@ -128,9 +234,9 @@ export default function Tonearm({ geometry, view, microscope = false, debug = fa
         {/* ============ TonearmAssembly (yaw only) ============ */}
         <group ref={assembly}>
           {/* Bearing housing + gimbal */}
-          <RoundedBox args={[11, 9, 11]} radius={1.6} smoothness={3} castShadow position={[0, 1.5, 0]}>
+          <mesh geometry={rounded.bearing} castShadow position={[0, 1.5, 0]}>
             <meshStandardMaterial color="#2b2b33" metalness={0.7} roughness={0.35} />
-          </RoundedBox>
+          </mesh>
           <mesh castShadow>
             <cylinderGeometry args={[5.5, 5.5, 12, 20]} />
             <meshStandardMaterial color="#3a3a42" metalness={0.75} roughness={0.3} />
@@ -159,12 +265,36 @@ export default function Tonearm({ geometry, view, microscope = false, debug = fa
           </mesh>
 
           {/* ================= headshell ================= */}
-          <group position={[216, -5, 0]}>
+          <group
+            position={[216, -5, 0]}
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerUp}
+            onPointerOver={(e) => {
+              if (!cueEnabled) return;
+              e.stopPropagation();
+              hovering.current = true;
+              document.body.style.cursor = dragging.current ? "grabbing" : "grab";
+            }}
+            onPointerOut={() => {
+              hovering.current = false;
+              if (!dragging.current) document.body.style.cursor = "";
+            }}
+          >
+            {/* A generous invisible grab target over the headshell. The real
+                meshes stay visually precise while the interaction remains
+                comfortable with a mouse or fingertip. */}
+            <mesh
+              position={[1, 0, 0]}
+            >
+              <boxGeometry args={[34, 20, 24]} />
+              <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+            </mesh>
             {/* Headshell: a softened alloy plate, satin so it catches an edge
                 highlight rather than reading as a black block. */}
-            <RoundedBox args={[26, 3.5, 13]} radius={1.2} smoothness={3} castShadow position={[0, 2, 0]}>
+            <mesh geometry={rounded.shell} castShadow position={[0, 2, 0]}>
               <meshStandardMaterial color="#8d8b86" metalness={0.85} roughness={0.34} />
-            </RoundedBox>
+            </mesh>
             {/* Finger lift */}
             <mesh position={[-11, 4.5, 5.5]} rotation={[0.5, 0, 0]}>
               <cylinderGeometry args={[0.8, 0.8, 9, 8]} />
@@ -174,9 +304,9 @@ export default function Tonearm({ geometry, view, microscope = false, debug = fa
             {/* ================= cartridge ================= */}
             <group position={[5, -4, 0]}>
               {/* Cartridge body: deep oxblood lacquer with a brushed nose plate. */}
-              <RoundedBox args={[11, 7, 9]} radius={1} smoothness={3} castShadow>
+              <mesh geometry={rounded.cartridge} castShadow>
                 <meshPhysicalMaterial color="#3a1714" roughness={0.4} clearcoat={0.8} clearcoatRoughness={0.2} />
-              </RoundedBox>
+              </mesh>
               <mesh position={[5.6, -0.4, 0]}>
                 <boxGeometry args={[0.6, 5.2, 7.6]} />
                 <meshStandardMaterial color="#c9c4ba" metalness={0.9} roughness={0.3} />

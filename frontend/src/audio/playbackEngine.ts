@@ -10,6 +10,52 @@
  */
 
 export type PlaybackMode = "original" | "vinyl";
+export type AcousticSpace = "room";
+
+/**
+ * A deterministic, client-generated stereo impulse response. Codrops used
+ * downloaded room recordings; making ours in Web Audio keeps the feature
+ * self-contained and avoids shipping somebody else's licensed samples.
+ */
+function makeImpulseResponse(
+  ctx: AudioContext,
+): AudioBuffer {
+  const seconds = 0.9;
+  const decay = 5.8;
+  const preDelayS = 0.008;
+  const length = Math.ceil(ctx.sampleRate * seconds);
+  const buffer = ctx.createBuffer(2, length, ctx.sampleRate);
+
+  for (let channel = 0; channel < 2; channel++) {
+    const data = buffer.getChannelData(channel);
+    // xorshift32: stable on every load, but decorrelated between channels and
+    // spaces so the result has width instead of sounding like mono hiss.
+    let seed = 0x41c6ce57 ^ (channel * 0x9e3779b9);
+    let low = 0;
+    const start = Math.floor(preDelayS * ctx.sampleRate);
+    for (let i = start; i < length; i++) {
+      seed ^= seed << 13;
+      seed ^= seed >>> 17;
+      seed ^= seed << 5;
+      const noise = ((seed >>> 0) / 0xffffffff) * 2 - 1;
+      // A little low-pass diffusion prevents the synthetic tail from reading
+      // as white noise while retaining a warm, audible room.
+      low += (noise - low) * 0.22;
+      const t = (i - start) / Math.max(1, length - start - 1);
+      const envelope = Math.pow(1 - t, decay) * (0.72 + 0.28 * Math.exp(-t * 28));
+      data[i] = (noise * 0.38 + low * 0.62) * envelope;
+    }
+
+    // Early reflections give each preset a recognisable room shape before
+    // the diffuse tail arrives. Slight channel offsets make them spatial.
+    const taps = [[0.014, 0.72], [0.027, 0.48], [0.043, 0.31], [0.071, 0.18]];
+    for (const [delay, gain] of taps) {
+      const i = Math.min(length - 1, Math.floor((delay + channel * 0.0017) * ctx.sampleRate));
+      data[i] += gain;
+    }
+  }
+  return buffer;
+}
 
 export class PlaybackEngine {
   private ctx: AudioContext | null = null;
@@ -21,13 +67,20 @@ export class PlaybackEngine {
   private gainOriginal: GainNode | null = null;
   private gainVinyl: GainNode | null = null;
 
-  // Master volume feeds a safety limiter, not the destination directly. At
-  // the default 1x level the limiter sits at digital full scale and is
-  // effectively transparent, so "Original" really is the decoded upload.
-  // It only becomes active when the user deliberately boosts above 1x.
+  // Vinyl alone receives the room response. Digital goes directly through
+  // volume to the destination, without acoustics or the vinyl safety limiter.
+  private programBus: GainNode | null = null;
+  private dryGain: GainNode | null = null;
+  private roomConvolver: ConvolverNode | null = null;
+  private roomGain: GainNode | null = null;
+
+  // The vinyl bus retains its existing output protection. Digital deliberately
+  // bypasses it so the reference is not compressed even near full scale.
   private masterGain: GainNode | null = null;
+  private digitalMasterGain: GainNode | null = null;
   private limiter: DynamicsCompressorNode | null = null;
   private volume = 1.0;
+  private acousticSpace: AcousticSpace = "room";
 
   private mode: PlaybackMode = "vinyl";
   private startedAtCtxTime = 0; // ctx.currentTime when playback began
@@ -62,7 +115,7 @@ export class PlaybackEngine {
   /** Current clip position in seconds. */
   position(): number {
     if (!this.ctx || !this.playing) return this.startOffset;
-    return Math.min(this.startOffset + this.ctx.currentTime - this.startedAtCtxTime, this.duration);
+    return Math.min(this.startOffset + Math.max(0, this.ctx.currentTime - this.startedAtCtxTime), this.duration);
   }
 
   private ensureContext(): AudioContext {
@@ -71,6 +124,24 @@ export class PlaybackEngine {
       this.ctx = new AudioContext();
       this.masterGain = this.ctx.createGain();
       this.masterGain.gain.value = this.volume;
+      this.digitalMasterGain = this.ctx.createGain();
+      this.digitalMasterGain.gain.value = this.volume;
+      this.digitalMasterGain.connect(this.ctx.destination);
+
+      this.programBus = this.ctx.createGain();
+      this.dryGain = this.ctx.createGain();
+      this.roomConvolver = this.ctx.createConvolver();
+      this.roomConvolver.buffer = makeImpulseResponse(this.ctx);
+      this.roomGain = this.ctx.createGain();
+
+      this.programBus.connect(this.dryGain);
+      this.dryGain.connect(this.masterGain);
+      this.programBus.connect(this.roomConvolver);
+      this.roomConvolver.connect(this.roomGain);
+      this.roomGain.connect(this.masterGain);
+
+      this.dryGain.gain.value = 0.94;
+      this.roomGain.gain.value = 0.18;
       this.limiter = this.ctx.createDynamicsCompressor();
       // A hard knee just below 0 dBFS leaves normal 1x playback untouched.
       // The previous low threshold compressed both A and B at ordinary
@@ -91,11 +162,20 @@ export class PlaybackEngine {
     this.volume = volume;
     if (this.ctx && this.masterGain) {
       this.masterGain.gain.setTargetAtTime(volume, this.ctx.currentTime, 0.02);
+      this.digitalMasterGain?.gain.setTargetAtTime(volume, this.ctx.currentTime, 0.02);
     }
   }
 
   get currentVolume(): number {
     return this.volume;
+  }
+
+  setAcousticSpace(space: AcousticSpace): void {
+    this.acousticSpace = space;
+  }
+
+  get currentAcousticSpace(): AcousticSpace {
+    return this.acousticSpace;
   }
 
   play(offset?: number): void {
@@ -112,8 +192,10 @@ export class PlaybackEngine {
     // Ramps are only for LIVE switches (applyModeGains).
     this.gainOriginal.gain.value = this.mode === "original" ? 1 : 0;
     this.gainVinyl.gain.value = this.mode === "vinyl" ? 1 : 0;
-    this.gainOriginal.connect(this.masterGain!);
-    this.gainVinyl.connect(this.masterGain!);
+    this.gainOriginal.connect(this.digitalMasterGain!);
+    this.gainVinyl.connect(this.programBus!);
+    this.roomGain!.gain.cancelScheduledValues(ctx.currentTime);
+    this.roomGain!.gain.value = this.mode === "vinyl" ? 0.18 : 0;
 
     this.srcOriginal = ctx.createBufferSource();
     this.srcOriginal.buffer = this.original;
@@ -130,6 +212,7 @@ export class PlaybackEngine {
 
     this.srcVinyl.onended = () => {
       if (this.playing) {
+        this.stopSources();
         this.playing = false;
         this.startOffset = 0;
         this.onEnded?.();
@@ -168,6 +251,12 @@ export class PlaybackEngine {
     this.holdGain(other.gain, t);
     target.gain.linearRampToValueAtTime(1, end);
     other.gain.linearRampToValueAtTime(0, end);
+    // Mute any convolution tail on Digital too; otherwise reverb from the
+    // outgoing vinyl version could linger underneath the clean reference.
+    if (this.roomGain) {
+      this.holdGain(this.roomGain.gain, t);
+      this.roomGain.gain.linearRampToValueAtTime(this.mode === "vinyl" ? 0.18 : 0, end);
+    }
   }
 
   /** Preserve the current value if a rapid second click interrupts a fade. */
@@ -192,6 +281,11 @@ export class PlaybackEngine {
         }
       }
     }
+    this.srcOriginal?.disconnect();
+    this.srcVinyl?.disconnect();
+    this.gainOriginal?.disconnect();
+    this.gainVinyl?.disconnect();
+    this.gainOriginal = this.gainVinyl = null;
     this.srcOriginal = this.srcVinyl = null;
   }
 

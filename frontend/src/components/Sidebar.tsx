@@ -1,19 +1,7 @@
 import { useRef, useState } from "react";
+import { useShallow } from "zustand/react/shallow";
 
 import { useStore } from "../state/store";
-
-/** Sidebar jump-points into The Vinyl Story (keys match content/vinylStory). */
-const CONCEPTS: Array<[string, string]> = [
-  ["Start here — the needle drops", "prologue"],
-  ["Before music could be kept", "before"],
-  ["The first sounds played back", "first-sounds"],
-  ["From cylinders to discs", "discs"],
-  ["The birth of the modern LP", "modern-vinyl"],
-  ["Inside the groove", "inside-groove"],
-  ["Why vinyl sounds like vinyl", "why-sounds"],
-  ["When the record became an instrument", "changes-music"],
-  ["The record that refused to disappear", "refused"],
-];
 
 function formatTime(s: number): string {
   const m = Math.floor(s / 60);
@@ -32,7 +20,12 @@ export default function Sidebar() {
     loading,
     playing,
     openExplorerCard,
-  } = useStore();
+  } = useStore(useShallow((s) => ({
+    analysis: s.analysis, library: s.library, examples: s.examples,
+    selectSession: s.selectSession, upload: s.upload, useDemo: s.useDemo,
+    useExample: s.useExample, loading: s.loading, playing: s.playing,
+    openExplorerCard: s.openExplorerCard,
+  })));
   const fileInput = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
 
@@ -40,21 +33,78 @@ export default function Sidebar() {
     const file = files?.[0];
     if (file) void upload(file);
   };
+  const namedParts = analysis?.filename.split(" — ") ?? [];
+  const nowTitle = namedParts.length > 1 ? namedParts.slice(1).join(" — ") : analysis?.filename;
+  const nowArtist = namedParts.length > 1 ? namedParts[0] : null;
 
   return (
     <aside className="sidebar">
-      <div className="brand">
-        <h1>
-          Vinyl<em>ize</em>
-        </h1>
-        <p>
-          Cut any song to a virtual record, then hear what the needle makes of it.
-        </p>
-        <div className="brand-credit">Long-playing · 33⅓ rpm · microgroove</div>
-      </div>
+      <header className="brand">
+        <div className="brand-mark" aria-hidden>V</div>
+        <div>
+          <h1>
+            Vinyl<em>ize</em>
+          </h1>
+          <p>A small listening room for curious ears.</p>
+        </div>
+      </header>
 
-      <div className="side-section">
-        <h2>Your record</h2>
+      <section className={`now-spinning${analysis ? " occupied" : ""}`}>
+        <span className="hand-label">On the turntable</span>
+        <div className={`now-disc${playing ? " spinning" : ""}`} aria-hidden />
+        <div className="now-copy">
+          <strong title={analysis?.filename}>
+            {nowTitle ?? "The house pressing"}
+          </strong>
+          <span>
+            {analysis
+              ? `${nowArtist ? `${nowArtist} · ` : ""}${analysis.clip_duration_s.toFixed(0)} sec · ${analysis.is_stereo ? "stereo" : "mono"}`
+              : "The room is warm. Pick something below."}
+          </span>
+        </div>
+      </section>
+
+      {examples.length > 0 && (
+        <section className="record-crate">
+          <div className="crate-heading">
+            <span>Records from the crate</span>
+            <small>Pick one</small>
+          </div>
+          <ul className="example-list">
+            {examples.map((ex, i) => {
+              const name = ex.artist ? `${ex.artist} — ${ex.title}` : ex.title;
+              const active = analysis?.filename === name;
+              return (
+                <li key={ex.id}>
+                  <button
+                    className={`example${active ? " active" : ""}`}
+                    onClick={() => void useExample(ex.id)}
+                    disabled={loading !== null || active}
+                    aria-pressed={active}
+                    title={active ? `${name} is on the platter` : `Put on ${name}`}
+                  >
+                    <span
+                      className={`example-disc tone-${i % 3}${active && playing ? " spinning" : ""}`}
+                      aria-hidden
+                    />
+                    <span className="example-text">
+                      <span className="example-title">{ex.title}</span>
+                      <span className="example-artist">{ex.artist ?? "Example record"}</span>
+                    </span>
+                    <span className="example-time">{formatTime(ex.duration_s)}</span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
+
+      <section className="bring-your-own">
+        <div className="side-title">
+          <span>Bring your own</span>
+          <small>Up to three minutes</small>
+        </div>
         <div
           className={`upload-zone${dragging ? " dragging" : ""}`}
           onClick={() => fileInput.current?.click()}
@@ -69,8 +119,11 @@ export default function Sidebar() {
             onFiles(e.dataTransfer.files);
           }}
         >
-          <strong>Drop a record in</strong>
-          MP3 or WAV — or click to browse
+          <span className="upload-plus" aria-hidden>+</span>
+          <span>
+            <strong>Drop a song here</strong>
+            MP3, WAV, FLAC or OGG
+          </span>
           <input
             ref={fileInput}
             type="file"
@@ -79,98 +132,46 @@ export default function Sidebar() {
             onChange={(e) => onFiles(e.target.files)}
           />
         </div>
-        <div style={{ marginTop: 10, textAlign: "center" }}>
-          <button className="btn" onClick={() => void useDemo()} disabled={loading !== null}>
-            ▶ Play the demo record
-          </button>
-        </div>
-        <p className="slot-note">Up to the first three minutes are cut to the disc.</p>
-
-        {examples.length > 0 && (
-          <div className="examples">
-            <div className="examples-head">Or pull one off the shelf</div>
-            <ul className="example-list">
-              {examples.map((ex, i) => {
-                const name = ex.artist ? `${ex.artist} — ${ex.title}` : ex.title;
-                const active = analysis?.filename === name;
-                return (
-                  <li key={ex.id}>
-                    <button
-                      className={`example${active ? " active" : ""}`}
-                      onClick={() => void useExample(ex.id)}
-                      disabled={loading !== null || active}
-                      aria-pressed={active}
-                      title={active ? `${name} is on the platter` : `Cut ${name} to disc`}
-                    >
-                      <span
-                        className={`example-disc tone-${i % 3}${active && playing ? " spinning" : ""}`}
-                        aria-hidden
-                      />
-                      <span className="example-text">
-                        <span className="example-title">{ex.title}</span>
-                        <span className="example-artist">{ex.artist ?? "Example record"}</span>
-                      </span>
-                      <span className="example-time">{formatTime(ex.duration_s)}</span>
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
-        )}
-      </div>
-
-      {analysis && (
-        <div className="file-info">
-          <div className="name" title={analysis.filename}>
-            {analysis.filename}
-          </div>
-          <dl>
-            <dt>Clip</dt>
-            <dd>{analysis.clip_duration_s.toFixed(1)} s of {analysis.full_duration_s.toFixed(1)} s</dd>
-            <dt>Sample rate</dt>
-            <dd>{(analysis.sample_rate / 1000).toFixed(1)} kHz</dd>
-            <dt>Channels</dt>
-            <dd>{analysis.is_stereo ? "stereo" : "mono"}</dd>
-          </dl>
-        </div>
-      )}
+        <button className="house-demo" onClick={() => void useDemo()} disabled={loading !== null}>
+          Or spin the little house demo <span aria-hidden>→</span>
+        </button>
+      </section>
 
       {library.length > 1 && (
-        <div className="side-section">
-          <h2>Library</h2>
+        <section className="recent-stack">
+          <div className="side-title">
+            <span>Recently played</span>
+            <small>{library.length} sleeves</small>
+          </div>
           <ul className="library-list">
             {library.map((entry) => (
-              <li
-                key={entry.session_id}
-                className={entry.session_id === analysis?.session_id ? "active" : ""}
-                onClick={() => void selectSession(entry.session_id)}
-                title={entry.filename}
-              >
-                <span className="lib-name">{entry.filename}</span>
-                <span className="lib-meta">
-                  {entry.clip_duration_s.toFixed(0)} s · {entry.is_stereo ? "stereo" : "mono"}
-                </span>
+              <li key={entry.session_id}>
+                <button
+                  className={entry.session_id === analysis?.session_id ? "active" : ""}
+                  onClick={() => void selectSession(entry.session_id)}
+                  title={entry.filename}
+                >
+                  <span className="lib-name">{entry.filename}</span>
+                  <span className="lib-meta">{entry.clip_duration_s.toFixed(0)} sec</span>
+                </button>
               </li>
             ))}
           </ul>
-          <p className="slot-note">Recent clips stay on the shelf — click one to play it again.</p>
-        </div>
+        </section>
       )}
 
-      <div className="side-section">
-        <h2>The story</h2>
-        <ul className="concept-list">
-          {CONCEPTS.map(([label, cardKey]) => (
-            <li key={cardKey} onClick={() => openExplorerCard(cardKey)}>
-              <span>{label}</span>
-              <span className="concept-go" aria-hidden>
-                ›
-              </span>
-            </li>
-          ))}
-        </ul>
-      </div>
+      <button className="story-letter" onClick={() => openExplorerCard("prologue")}>
+        <span className="story-stamp" aria-hidden>33⅓</span>
+        <span>
+          <small>From the record shop</small>
+          <strong>Read the story of vinyl</strong>
+        </span>
+        <span className="letter-arrow" aria-hidden>↗</span>
+      </button>
+
+      <footer className="sidebar-signoff">
+        Made for late-night listening<br />and passing the headphones around.
+      </footer>
     </aside>
   );
 }

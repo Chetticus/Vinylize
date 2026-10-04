@@ -1,372 +1,166 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useState } from "react";
+import { useShallow } from "zustand/react/shallow";
 
 import { useStore } from "../../state/store";
-import { sectionAtTime, type ChannelView } from "../groove/grooveMath";
-import { safeAudioBoost, scaleLabel } from "../groove/grooveScale";
-import { type LodMode } from "../groove/grooveLod";
-import { clipTime, isFrozen, setFrozen, stylusStatus, type StylusStatus } from "../groove/recordMotion";
-import { ARM, validateKinematics } from "../groove/tonearmKinematics";
-import TurntableScene, { type EnvironmentKind, type FlyRequest } from "../groove/TurntableScene";
+import { OMEGA } from "../groove/grooveMath";
+import TurntableScene from "../groove/TurntableScene";
 import { prepareVinylSurface } from "../groove/GrooveOverviewMaterial";
 import { prepareKit } from "../groove/room/kit";
 import { detectQuality } from "../groove/room/quality";
+import type { AnalyzeResponse, GrooveGeometry, ProcessResponse } from "../../types/api";
 
-const STEREO_VIEWS: Array<[ChannelView, string, string]> = [
-  ["both", "Full stereo", "Complete groove: lateral swing + wall/depth modulation"],
-  ["lateral", "L+R", "Mono sum only — pure lateral motion, constant depth (a mono record)"],
-  ["vertical", "L−R", "Stereo difference only — the walls/depth breathe, no lateral swing"],
-];
-
-const LOD_MODES: Array<[LodMode, string, string]> = [
-  ["overview", "Overview", "Whole turntable — the groove band reads as satin"],
-  ["closeup", "Close-up", "Individual turns at their true ~0.25 mm spacing"],
-  ["microscope", "Microscope", "Millimeters from the vinyl: the V-trench itself"],
-];
-
-interface Readout {
-  timeS: number;
-  radiusMm: number;
-  status: StylusStatus;
+interface SceneRecord {
+  analysis: AnalyzeResponse;
+  geometry: GrooveGeometry;
+  processResult: ProcessResponse;
 }
 
-export default function GrooveTab() {
-  const { geometry, analysis, processResult, config, seek } = useStore();
+const HOUSE_SESSION_ID = "vinylize-house-record";
 
-  const [view, setView] = useState<ChannelView>("both");
-  const [environment, setEnvironment] = useState<EnvironmentKind>("cafe");
-  const [audioBoostReq, setAudioBoostReq] = useState(250);
-  const [cutaway, setCutaway] = useState(false);
-  const [guides, setGuides] = useState(false);
-  const [follow, setFollow] = useState(false);
-  const [freeze, setFreeze] = useState(false);
-  const [debug, setDebug] = useState(false);
-  const [fly, setFly] = useState<FlyRequest>({ mode: "overview", seq: 0 });
-  const [resetSignal, setResetSignal] = useState(0);
-  const [microActive, setMicroActive] = useState(false);
-  const [showHud, setShowHud] = useState(() => !window.matchMedia?.("(max-width: 900px)").matches);
-  const [readout, setReadout] = useState<Readout>({ timeS: 0, radiusMm: 0, status: "resting" });
-  // The card starts folded when the canvas is narrow, so the room isn't
-  // covered; once the listener opens or folds it, their choice stands.
-  const [panelOpen, setPanelOpen] = useState(() => !window.matchMedia?.("(max-width: 760px)").matches);
-  const panelToggled = useRef(false);
-  const panelRef = useRef<HTMLElement>(null);
-  const [panelInset, setPanelInset] = useState(0);
+/** A quiet, client-only record that lets the listening room open before the
+ * visitor chooses any audio. It follows the same units and physical scale as
+ * backend geometry, but never asks the API for microscope detail. */
+function makeHouseRecord(): SceneRecord {
+  const n = 2048;
+  const durationS = 54;
+  const pitchMm = 0.25;
+  const startRadiusMm = 146;
+  const theta = new Float32Array(n);
+  const radius = new Float32Array(n);
+  const lateral = new Float32Array(n);
+  const vertical = new Float32Array(n);
+  const timeS = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    const t = (i / (n - 1)) * durationS;
+    const angle = OMEGA * t;
+    timeS[i] = t;
+    theta[i] = angle;
+    radius[i] = (startRadiusMm - (pitchMm / (2 * Math.PI)) * angle) / 1000;
+    // A near-silent handmade wobble keeps the texture from reading as a
+    // sterile placeholder while remaining visibly calmer than a real song.
+    lateral[i] = Math.sin(angle * 3.1) * 0.000002;
+    vertical[i] = Math.sin(angle * 1.7 + 0.8) * 0.000001;
+  }
+  const revolutions = (OMEGA * durationS) / (2 * Math.PI);
+  const meta = {
+    n_points: n,
+    peak_excursion_um: 2,
+    groove_length_m: (2 * Math.PI * 142 * revolutions) / 1000,
+    revolutions,
+    start_radius_mm: startRadiusMm,
+    groove_pitch_um: pitchMm * 1000,
+    groove_half_width_um: 35,
+  };
+  const geometry: GrooveGeometry = { meta, theta, radius, lateral, vertical, timeS };
+  const analysis: AnalyzeResponse = {
+    session_id: HOUSE_SESSION_ID,
+    sample_rate: 44100,
+    n_channels: 2,
+    is_stereo: true,
+    full_duration_s: durationS,
+    clip_duration_s: durationS,
+    waveform: { mins: [], maxs: [] },
+    filename: "Vinylize house record",
+  };
+  const processResult: ProcessResponse = {
+    session_id: HOUSE_SESSION_ID,
+    geometry: meta,
+    cards: [],
+    vinyl_url: "",
+    original_url: "",
+    geometry_url: "",
+  };
+  return { analysis, geometry, processResult };
+}
 
-  // Loading curtain. The room's textures are painted in small yielded steps
-  // first (progress bar), then the canvas mounts and compiles its shaders
-  // behind the curtain; only then does the curtain lift. Painting happens
-  // once per session — later visits skip straight to compiling.
+const HOUSE_RECORD = makeHouseRecord();
+
+
+function GrooveTab({ active = true }: { active?: boolean }) {
+  const { liveGeometry, liveAnalysis, liveProcessResult, loading, seek, beginCue, cueTo, endCue } =
+    useStore(useShallow((s) => ({
+      liveGeometry: s.geometry, liveAnalysis: s.analysis, liveProcessResult: s.processResult,
+      loading: s.loading !== null, seek: s.seek, beginCue: s.beginCue, cueTo: s.cueTo, endCue: s.endCue,
+    })));
+
+  const [sceneRecord, setSceneRecord] = useState<SceneRecord>(HOUSE_RECORD);
   const [kitFrac, setKitFrac] = useState(0);
   const [kitReady, setKitReady] = useState(false);
   const [sceneReady, setSceneReady] = useState(false);
-  const [curtainGone, setCurtainGone] = useState(false);
-  const hasGeometry = !!geometry;
+  const roomReady = useCallback(() => setSceneReady(true), []);
+
   useEffect(() => {
-    if (!geometry || kitReady) return;
     let alive = true;
-    // Give the curtain a moment to paint before the first heavy step. The
-    // room's textures and this record's groove strips are computed in Web
-    // Workers in parallel; the page only wraps the finished pixels.
-    const id = window.setTimeout(() => {
-      Promise.all([
-        prepareKit(detectQuality(), (f) => alive && setKitFrac(f)),
-        prepareVinylSurface(geometry),
-      ]).then(() => alive && setKitReady(true));
-    }, 40);
-    return () => {
-      alive = false;
-      window.clearTimeout(id);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasGeometry]);
-  // Fallback in case the fade's transitionend never arrives.
-  useEffect(() => {
-    if (!sceneReady) return;
-    const id = window.setTimeout(() => setCurtainGone(true), 900);
-    return () => window.clearTimeout(id);
-  }, [sceneReady]);
+    void Promise.all([
+      prepareKit(detectQuality(), (f) => alive && setKitFrac(f)),
+      prepareVinylSurface(HOUSE_RECORD.geometry),
+    ]).then(() => alive && setKitReady(true));
+    return () => { alive = false; };
+  }, []);
 
-  // Tell the camera how much of the canvas the card covers, so the subject
-  // is framed in the part left visible (see CameraRig's film offset).
+  // Keep the previous record until the next surface is ready. This does not
+  // subscribe to the audio clock: the room never re-renders on playback ticks.
   useEffect(() => {
-    const el = panelRef.current;
-    const wrapEl = el?.parentElement;
-    if (!el || !wrapEl) return;
-    const measure = () => {
-      const wrap = wrapEl.getBoundingClientRect();
-      if (panelOpen && !panelToggled.current && wrap.width > 0 && wrap.width < 620) {
-        setPanelOpen(false);
-        return;
-      }
-      const r = el.getBoundingClientRect();
-      setPanelInset(!panelOpen || wrap.width < 700 ? 0 : Math.round(wrap.right - r.left));
-    };
-    measure();
-    const ro = new ResizeObserver(measure);
-    ro.observe(el);
-    ro.observe(wrapEl);
-    return () => ro.disconnect();
-  }, [panelOpen, geometry]);
-
-  const effectiveBoost = useMemo(
-    () => (geometry ? safeAudioBoost(geometry, audioBoostReq) : audioBoostReq),
-    [geometry, audioBoostReq],
-  );
-
-  // Freeze-record wiring (module-level flag read by the deck clock).
-  useEffect(() => {
-    setFrozen(freeze);
-    return () => setFrozen(false);
-  }, [freeze]);
-
-  // Debug: pure-math kinematics self-check (runs even with WebGL frames
-  // suspended). Confirms the solved tip lands on the contact groove radius.
-  useEffect(() => {
-    if (!debug || !geometry) return;
-    const worst = validateKinematics(ARM, geometry);
-    // eslint-disable-next-line no-console
-    console.log(
-      `[tonearm debug] kinematics self-check: worst tip/groove radius error ` +
-        `${worst.toFixed(3)} mm over the clip (tolerance 1 mm) — ` +
-        (worst < 1 ? "OK" : "FAIL"),
-    );
-  }, [debug, geometry]);
-
-  // Readout refresh at 4 Hz (interval, not rAF: keeps ticking in hidden panes).
-  useEffect(() => {
-    if (!geometry) return;
-    const id = window.setInterval(() => {
-      const t = clipTime();
-      const i = sectionAtTime(geometry, t);
-      setReadout({
-        timeS: t,
-        radiusMm: geometry.radius[i] * 1000,
-        status: stylusStatus(t, useStore.getState().playing),
+    if (!liveGeometry || !liveAnalysis || !liveProcessResult ||
+        liveAnalysis.session_id !== liveProcessResult.session_id) return;
+    let alive = true;
+    void prepareVinylSurface(liveGeometry).then(() => {
+      if (alive) setSceneRecord({
+        geometry: liveGeometry, analysis: liveAnalysis, processResult: liveProcessResult,
       });
-    }, 250);
-    return () => window.clearInterval(id);
-  }, [geometry]);
+    });
+    return () => { alive = false; };
+  }, [liveGeometry, liveAnalysis, liveProcessResult]);
 
-  if (!geometry || !analysis || !processResult) return null;
-
-  const flyTo = (mode: LodMode) => setFly((f) => ({ mode, seq: f.seq + 1 }));
+  const house = sceneRecord.analysis.session_id === HOUSE_SESSION_ID;
+  // Don't let the retained old disc seek the newly loaded audio during a swap.
+  const cueEnabled = !house && !loading &&
+    sceneRecord.analysis.session_id === liveProcessResult?.session_id;
 
   return (
-    <div className="tab-content-inner" style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-      <div className="groove-toolbar">
-        <span className="env-toggle" role="group" aria-label="Environment">
-          <button
-            className={`btn small${environment === "cafe" ? " active" : ""}`}
-            onClick={() => setEnvironment("cafe")}
-          >
-            Listening room
-          </button>
-          <button
-            className={`btn small${environment === "studio" ? " active" : ""}`}
-            onClick={() => setEnvironment("studio")}
-          >
-            Studio
-          </button>
-        </span>
-        <label className="debug-toggle" title="Pivot, arm-reach circle, stylus/target markers + console self-check">
-          <input type="checkbox" checked={debug} onChange={(e) => setDebug(e.target.checked)} />
-          debug
-        </label>
-        <div className="spacer" />
-        <span style={{ fontSize: 12, color: "var(--text-dim)" }}>
-          Zoom in — the microscope wakes up under 5 cm from the stylus.
-        </span>
+    <div className="tab-content-inner room-content">
+      <div className="groove-toolbar room-toolbar">
+        <span className="room-setting">Listening room</span>
+        <span className="room-setting">Room acoustics</span>
+        <span className="room-help">Move your cursor to look around · scroll to move closer</span>
       </div>
-
       <div className="groove-wrap">
         {kitReady && (
           <TurntableScene
-            onReady={() => setSceneReady(true)}
-            geometry={geometry}
-            filename={analysis.filename}
-            sessionId={analysis.session_id}
-            dataVersion={processResult}
-            environment={environment}
-            view={view}
-            audioBoost={effectiveBoost}
-            cutaway={cutaway}
-            guides={guides}
-            follow={follow}
-            stylusSizeScale={config.stylus_size}
-            debug={debug}
-            fly={fly}
-            resetSignal={resetSignal}
+            active={active}
+            geometry={sceneRecord.geometry}
+            filename={sceneRecord.analysis.filename}
+            sessionId={sceneRecord.analysis.session_id}
+            onReady={roomReady}
             onScrub={seek}
-            onMicroActive={setMicroActive}
-            insetRight={panelInset}
+            cueEnabled={cueEnabled}
+            onCueStart={beginCue}
+            onCueMove={cueTo}
+            onCueEnd={endCue}
           />
         )}
-
-        {!curtainGone && (
-          <div
-            className={`groove-loading${sceneReady ? " lifted" : ""}`}
-            role="status"
-            aria-live="polite"
-            onTransitionEnd={() => sceneReady && setCurtainGone(true)}
-          >
+        {house && sceneReady && (
+          <div className="room-welcome">
+            <span>The room is ready</span>
+            <b>Choose a record from the shelf</b>
+            <p>The house pressing is only keeping the platter warm.</p>
+          </div>
+        )}
+        {!sceneReady && (
+          <div className="groove-loading" role="status" aria-live="polite">
             <div className="loading-disc" aria-hidden />
             <div className="loading-copy">
               <span className="loading-kicker">Now setting up</span>
-              <b>{kitReady ? "Warming up the valves…" : "Dressing the listening room…"}</b>
+              <b>{kitReady ? "Warming up the room…" : "Dressing the listening room…"}</b>
               <div className="progress-track" aria-hidden>
-                <div
-                  className="progress-fill"
-                  style={{ width: `${Math.round((kitReady ? 0.85 + (sceneReady ? 0.15 : 0) : kitFrac * 0.85) * 100)}%` }}
-                />
+                <div className="progress-fill" style={{ width: `${Math.round(kitReady ? 90 : kitFrac * 85)}%` }} />
               </div>
-              <span className="loading-note">
-                {kitReady ? "Compiling the lighting" : "Painting wood grain, plaster and rain — first visit only"}
-              </span>
             </div>
           </div>
-        )}
-
-        {/* ------------- inspection card (top-right, collapsible) ------------- */}
-        <aside
-          ref={panelRef}
-          className={`groove-panel${panelOpen ? "" : " collapsed"}`}
-          aria-label="Inspection controls"
-        >
-          <button
-            className="panel-head"
-            onClick={() => {
-              panelToggled.current = true;
-              setPanelOpen((o) => !o);
-            }}
-            aria-expanded={panelOpen}
-            title={panelOpen ? "Fold the controls away" : "Show the inspection controls"}
-          >
-            <span>Inspect</span>
-            <span className="panel-caret" aria-hidden>
-              {panelOpen ? "−" : "+"}
-            </span>
-          </button>
-          {panelOpen && (
-            <div className="panel-body">
-              <div className="panel-section">
-                <h4>View</h4>
-                {LOD_MODES.map(([mode, label, hint], i) => (
-                  <button
-                    key={mode}
-                    className="btn small block panel-index"
-                    title={hint}
-                    onClick={() => flyTo(mode)}
-                  >
-                    <span className="idx" aria-hidden>
-                      {["i", "ii", "iii"][i]}
-                    </span>
-                    {label}
-                  </button>
-                ))}
-                <button
-                  className="panel-link"
-                  title="Re-frame the whole turntable"
-                  onClick={() => setResetSignal((n) => n + 1)}
-                >
-                  ⌂ Reset camera
-                </button>
-              </div>
-              <div className="panel-section">
-                <h4>Stereo encoding</h4>
-                {STEREO_VIEWS.map(([key, label, hint]) => (
-                  <button
-                    key={key}
-                    className={`btn small block${view === key ? " active" : ""}`}
-                    title={hint}
-                    aria-pressed={view === key}
-                    onClick={() => setView(key)}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-              <div className="panel-section">
-                <h4>Inspection</h4>
-                <label className="panel-check">
-                  <input type="checkbox" checked={cutaway} onChange={(e) => setCutaway(e.target.checked)} />
-                  Cutaway at stylus
-                </label>
-                <label className="panel-check">
-                  <input type="checkbox" checked={guides} onChange={(e) => setGuides(e.target.checked)} />
-                  Pitch guides
-                </label>
-                <label className="panel-check">
-                  <input type="checkbox" checked={follow} onChange={(e) => setFollow(e.target.checked)} />
-                  Follow stylus
-                </label>
-                <label className="panel-check">
-                  <input type="checkbox" checked={freeze} onChange={(e) => setFreeze(e.target.checked)} />
-                  Freeze record
-                </label>
-                <label className="panel-slider" title="Only the audio wiggle is magnified; pitch stays true">
-                  Audio zoom ×{Math.round(effectiveBoost)}
-                  {effectiveBoost < audioBoostReq - 1 && " (max)"}
-                  <input
-                    type="range"
-                    min={25}
-                    max={1000}
-                    step={25}
-                    value={audioBoostReq}
-                    onChange={(e) => setAudioBoostReq(Number(e.target.value))}
-                  />
-                </label>
-              </div>
-            </div>
-          )}
-        </aside>
-
-        {/* ------------- closeable readout HUD (bottom-left) ------------- */}
-        {showHud ? (
-          <div className="groove-hud">
-            <button
-              className="hud-close"
-              title="Hide readout"
-              onClick={() => setShowHud(false)}
-              aria-label="Hide readout"
-            >
-              ✕
-            </button>
-            <div className="readout-row">
-              <span className="readout-chip">33⅓ RPM</span>
-              <span className="readout-chip">
-                t&nbsp;<b>{readout.timeS.toFixed(1)} s</b>
-              </span>
-              <span className="readout-chip">
-                groove radius&nbsp;<b>{readout.radiusMm.toFixed(1)} mm</b>
-              </span>
-              <span className={`readout-chip status-${readout.status}`}>
-                stylus: <b>{readout.status}</b>
-                {isFrozen() && " (frozen)"}
-              </span>
-            </div>
-            <b>{geometry.meta.revolutions.toFixed(1)} turns</b> ·{" "}
-            {geometry.meta.groove_length_m.toFixed(1)} m of groove · pitch{" "}
-            {(geometry.meta.groove_pitch_um / 1000).toFixed(2)} mm (true scale) · peak excursion{" "}
-            <b>{geometry.meta.peak_excursion_um.toFixed(1)} µm</b>
-            <br />
-            Scroll toward the stylus to enter the microscope · click the groove to play from that
-            spot.
-          </div>
-        ) : (
-          <button
-            className="btn small hud-reopen"
-            title="Show readout"
-            onClick={() => setShowHud(true)}
-          >
-            ⓘ readout
-          </button>
-        )}
-
-        {/* ------------- honest-scale disclosure (bottom-right) ------------- */}
-        {microActive && (
-          <div className="scale-label">{scaleLabel(effectiveBoost, config.stylus_size)}</div>
         )}
       </div>
     </div>
   );
 }
+
+export default memo(GrooveTab);

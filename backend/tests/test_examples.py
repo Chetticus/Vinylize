@@ -29,3 +29,14 @@ def test_examples_list_and_load(tmp_path, monkeypatch):
     body = res.json()
     assert body["filename"] == "Ben E. King — Stand By Me"
     assert body["is_stereo"] is True
+
+    # All three files appear in the requested shelf order; the retired
+    # Kanye file is not offered even if it still exists locally for recovery.
+    for filename in ["nothing-can-change-this-love.mp3", "come-a-little-bit-closer.mp3", "family-business.mp3"]:
+        sf.write(tmp_path / filename, np.stack([tone, tone], axis=1), 44100, format="WAV")
+    assert [e["id"] for e in client.get("/api/examples").json()] == [
+        "stand-by-me", "nothing-can-change-this-love", "come-a-little-bit-closer",
+    ]
+    sam = client.post("/api/examples/nothing-can-change-this-love")
+    assert sam.status_code == 200
+    assert sam.json()["filename"] == "Sam Cooke — Nothing Can Change This Love"

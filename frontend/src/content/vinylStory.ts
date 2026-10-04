@@ -30,7 +30,7 @@
  */
 
 /** Tabs a story action can send the reader to. */
-export type ActionTarget = "compare" | "groove" | "waveform";
+export type ActionTarget = "groove";
 
 export interface StoryAction {
   label: string;
@@ -102,7 +102,7 @@ export const VINYL_STORY: StoryAct[] = [
         ],
         hear: {
           text: "Listen to the lead-in before the song begins. Vinylize cuts six seconds of silence into the groove ahead of your music, so anything audible in that gap comes from the simulated surface: noise, rumble and dust rather than your recording.",
-          action: { label: "⇄ Listen to the lead-in", target: "compare" },
+          action: { label: "Listen to the lead-in", target: "groove" },
         },
         explore: {
           text: "Follow the stylus as it settles near the outer edge and travels slowly inward. The platter turns at a true 33⅓ rpm against the audio clock, and the arm's angle is solved from the current playback position rather than animated.",
@@ -156,7 +156,7 @@ export const VINYL_STORY: StoryAct[] = [
         ],
         hear: {
           text: "Early recordings sound narrow, noisy, and distant to modern ears. That noise is not one single “vinyl effect”; it reflects the materials, recording method, playback equipment, age, and condition of each object. Vinylize models a modern LP played on a worn setup — an interpretation, not a reproduction of any particular era.",
-          action: { label: "⇄ Hear the interpretation", target: "compare" },
+          action: { label: "Hear the interpretation", target: "groove" },
         },
         explore: {
           text: "Zoom until a single groove wall fills the screen and watch how its shape follows the music. Vinylize renders discs only; it does not simulate a cylinder.",
@@ -276,7 +276,7 @@ export const VINYL_STORY: StoryAct[] = [
         ],
         hear: {
           text: "Vinylize scatters its dust and defects along the groove's physical length rather than evenly in time, then maps them back through the spiral — so how often you hear a tick depends on how fast the disc is passing the stylus. Repeating scratches, warps and skips are not modelled in this build.",
-          action: { label: "⇄ Listen for the ticks", target: "compare" },
+          action: { label: "Listen for the ticks", target: "groove" },
         },
         explore: {
           text: "Zoom to the magnified view. The V-shaped trench is generated from your own audio's groove signal at true pitch and radius, with the stylus resting in it. The audio modulation itself is magnified for visibility, and the on-screen label states the factor.",
@@ -305,8 +305,8 @@ export const VINYL_STORY: StoryAct[] = [
           "Then there is attention. Choosing a record, placing it on the platter, and listening through a side can change how someone engages with the music. That is a real part of the experience, even though it is not an audio specification.",
         ],
         hear: {
-          text: "Switch between the original and the Vinylize treatment. The differences come from modelled processes — RIAA equalization, stylus tracing loss, groove-wall saturation, wow and flutter, dust, surface noise and channel crosstalk — applied together at deliberately exaggerated amounts so they stay audible on laptop speakers.",
-          action: { label: "⇄ Compare the two", target: "compare" },
+          text: "Switch between Digital and the Vinylize treatment. The differences come from modelled processes — RIAA equalization, stylus tracing loss, groove-wall saturation, wow and flutter, surface texture and channel crosstalk — applied together at deliberately exaggerated amounts so they stay audible on laptop speakers.",
+          action: { label: "Return to the listening room", target: "groove" },
         },
         explore: {
           text: "This build applies those effects as one combined treatment and does not expose per-effect switches, so treat the comparison as the sum of them rather than a demonstration of any single characteristic.",
@@ -365,8 +365,8 @@ export const VINYL_STORY: StoryAct[] = [
           "Each format changed the balance between access, ownership, portability, and ritual. Digital listening did not destroy attention, and physical listening does not guarantee it — but the tools encourage different habits.",
         ],
         hear: {
-          text: "Compare the modelled surface noise and speed variation against the clean original. Keep in mind that when two real releases sound different, the cause is often a mastering decision rather than the storage format itself.",
-          action: { label: "⇄ Compare clean and coloured", target: "compare" },
+          text: "Compare the vinyl surface texture and speed variation against Digital. Keep in mind that when two real releases sound different, the cause is often a mastering decision rather than the storage format itself.",
+          action: { label: "Listen to the record", target: "groove" },
         },
         sources: [
           {
@@ -436,8 +436,8 @@ export const VINYL_STORY: StoryAct[] = [
           "The comparison should remain honest. A simulated effect is inspired by a physical process; it is not the same as pressing a record. This build lets you hear the treatment as a whole and see the groove it came from — and separating the individual elements, so curiosity can replace nostalgia, is still work left to do.",
         ],
         hear: {
-          text: "Switch between the original and the Vinylize treatment one final time. This time, listen for the individual elements by name and decide what each one contributes.",
-          action: { label: "⇄ One final comparison", target: "compare" },
+          text: "Switch between Digital and the Vinylize treatment one final time. This time, listen for the individual elements by name and decide what each one contributes.",
+          action: { label: "One final listen", target: "groove" },
         },
         question: "If every song is one tap away, what makes us stop and truly listen?",
       },

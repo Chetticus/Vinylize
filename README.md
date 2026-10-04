@@ -21,7 +21,7 @@ geometric idea:
   62 mm than at 146 mm).
 - **Wow & flutter is actual speed variation**, not a pitch-LFO painted on afterward: the
   simulated stylus literally reads the groove at a wobbling rate.
-- **Clicks are scattered per meter of groove**, so click rate in time scales with groove
+- **In the preserved physical-noise model, clicks are scattered per meter of groove**, so click rate in time scales with groove
   speed — slightly *fewer* clicks per second near the label, contrary to popular belief
   (the app explains why the folklore is wrong).
 - **The 3D groove is the same data the audio pipeline produced** — what you see engraved is
@@ -29,72 +29,43 @@ geometric idea:
 
 ## Features
 
-- **Upload MP3/WAV** (or press *Try the demo groove* — a synthesized funk loop built to
-  exercise every stage). Up to the first 3 minutes are cut to disc — with a live,
-  stage-by-stage render progress bar — and recent clips stay in a sidebar library for
-  instant switching.
-- **10-stage physics pipeline**: RIAA pre-emphasis → 45/45 mid/side encoding →
-  time→arc-length engraving → stylus contact patch → compliance saturation → wow/flutter
-  playback → clicks & pops → crosstalk → surface noise → RIAA de-emphasis. Every stage
-  independently toggleable, every parameter scaled from measured real-world values.
-- **Sample-synced A/B**: original and vinyl play simultaneously; switching flips gains, so
-  the only thing that changes is the physics.
-- **3D turntable in a listening room**: a complete deck — walnut plinth, satin deck
-  plate, machined platter and mat, vinyl with a procedural label carrying your filename,
-  and a fully articulated tonearm (pivot, tube, counterweight, headshell, cartridge,
-  cantilever, stylus) — on a walnut console in a private room above a record shop, in
-  the last hour of daylight: low sun through a rain-streaked window, bookshelf speakers,
-  a small amplifier, headphones on a stand, a leather reading chair with a lamp, a
-  shelf and crate of records, and the owner's half-finished coffee. Everything is built
-  in code — geometry from rounded boxes, lathes and swept tubes, and every surface
-  (walnut grain, plaster, woven rug, leather, brushed metal, speckled glaze, rain on
-  glass, abstract sleeve designs) painted procedurally from seeds. No model files, no
-  image assets, no generated imagery. A toggle switches to a minimal dark studio.
-  Screenshots: [docs/screenshots](docs/screenshots).
-
-- **Multiscale groove microscope**: the record is rendered at TRUE scale across three
-  levels of detail. From turntable distance the recorded band reads as satin (an
-  analytically anti-aliased procedural shader draws your clip's real turn count at the
-  real ~0.25 mm pitch, with per-turn loudness banding measured from your audio — a
-  3-minute clip really is ~100 tightly packed turns). Zoom closer and individual turns
-  resolve continuously — same shader, no LOD pop. Within ~5 cm of the stylus the
-  microscope wakes: the backend serves an 80 mm window of the *actual engraved groove*
-  around the playback position (plus the adjacent turns — the same song ±1.8 s, which is
-  what physically sits 0.25 mm away), rebuilt as a true-scale V-trench whose centerline
-  swings with L+R and whose walls/depth breathe with L−R. A cutaway slices the trench at
-  the stylus so you can watch the true-size (DSP-scaled) tip ride the walls; only the
-  audio wiggle is magnified, clamped so grooves can never collide, and a persistent label
-  discloses the exaggeration. Stereo view modes (Full / L+R / L−R) change the geometry
-  itself, not its color. The groove is a real V-profile along an
-  Archimedean spiral: lateral wiggle is the mono sum, depth breathing is the stereo
-  difference (the actual Westrex 45/45 geometry). Press play and the record spins at a
-  true 33⅓ RPM while the arm tracks the groove inward. Orbit, zoom, click the groove to
-  play from that spot; a debug mode overlays the pivot, arm-reach circle, and
-  stylus/target markers.
-
-  <details><summary><b>How the tonearm tracks the groove (kinematics)</b></summary>
-
-  The arm is a strict transform hierarchy rooted at a fixed pivot (real 9″-arm
-  numbers: pivot 212 mm from the spindle, 229 mm effective length), and the only
-  per-frame updates are one yaw angle and a millimeter-scale cantilever offset. The
-  record group's rotation is phased so the groove point playing at time *t* sits at
-  world radius *r(t)*; the arm yaw is then solved analytically as the intersection of
-  two circles — the groove revolution (radius *r* about the spindle) and the stylus
-  arc (radius 229 mm about the pivot) — via `A·cosα + B·sinα = C`. Like a real arm, the
-  tip crosses each radius at a small tracking angle rather than a fixed point, so the
-  solver iterates once to find the groove section actually under the tip and applies
-  that section's audio wiggle and depth as local cantilever compliance. Out-of-reach
-  radii clamp to the tangent position. `tonearmKinematics.ts` documents the derivation;
-  its `validateKinematics` self-check (debug mode) confirms the tip lands on the groove
-  radius to well under a millimeter across the whole clip.
-
-  </details>
-- **The inner-groove experiment**: the groove travels only ~8 mm inward per minute of music,
-  so the app lets you *place* the clip anywhere between 146 mm and 62 mm and hear the same
-  file degrade (long clips are auto-placed so they physically fit the program area).
-- **Engineering Explorer**: for each stage — the physics, where it lives on a record, why it
-  can't be eliminated, and measured numbers from your clip ("your 5–14 kHz band changed by
-  −6.6 dB", "your brightest moment at 0:04.8 dulls first").
+- **3D Groove opens first**, with a house pressing already on the deck; no
+  audio selection or backend render is needed to see the room.
+- **One listening room, one vinyl acoustic treatment**: the warm stereo Room
+  convolution stays on Vinyl. Digital bypasses all added effects. Studio, Dry/Hall, Inspect, Debug, and the
+  Listen & Compare page are no longer in the interface.
+- **Cursor-driven camera**: move your mouse to look around without holding
+  a button; scroll to zoom. Touch uses a one-finger gesture. Focus the canvas
+  to use arrow keys, or Home to reset the view.
+- **Smooth record exchanges**: the previous pressing remains visible while
+  the next song is prepared, then slides out and the replacement slides in.
+  Textures upload before the incoming record appears. The room stays mounted
+  across song changes and visits to The Vinyl Story.
+- **Three local example songs**, in shelf order: Stand By Me — Ben E. King;
+  Nothing Can Change This Love — Sam Cooke; Come a Little Bit Closer —
+  Jay & The Americans. Their recordings remain git-ignored.
+- **Bring your own MP3/WAV/FLAC/OGG**, or play the synthesized house demo.
+  Up to three minutes are cut, with stage-level progress.
+- **Warm vinyl processing**: RIAA, stylus tracing, compliance saturation,
+  wow/flutter, and crosstalk retain the previous preset. The current trial
+  replaces synthetic dust/noise with the exact Codrops recorded vinyl texture
+  at gain 0.27: 40% quieter in linear amplitude than our previous 0.45 preset.
+  Source credits and the one-line revert are in
+  [the asset notes](backend/app/audio/assets/README.md). The original physical
+  noise modules and full `CLASSIC_CONFIG` sound preset are preserved.
+- **Playback controls**: play/pause, seek, volume, and a sample-synchronized
+  Digital/Vinyl crossfade remain in the bottom transport. Digital preserves
+  decoded source samples with no reverb, vinyl processing, or limiter; the
+  shared silent lead-in keeps switching aligned. Drag the headshell
+  to lift the tonearm and cue by groove radius.
+- **The Vinyl Story** explains the physics and measured effects from your
+  audio, without a separate comparison page.
+- **Rendering budget**: static furniture is batched by material; sunlight
+  shadows are cached; the idle/hidden room stops drawing; playback ticks no
+  longer rebuild the scene. Desktop uses full-detail textures, restored
+  shadows and 1.5–2× rendering, with a sharp minimum resolution rather than
+  a blurry fallback. Decoded audio has a bounded cache.
+  See [performance notes](docs/PERFORMANCE.md) for details and validation limits.
 
 ## Architecture
 
@@ -143,11 +114,18 @@ start it, rather than failing at the first click.
 cd backend && python -m pytest
 ```
 
-22 tests cover: RIAA curve accuracy vs the analog standard and exact pre×de invertibility,
+Backend regression tests cover: RIAA curve accuracy vs the analog standard and exact pre×de invertibility,
 spiral map invertibility, near-transparency of the full chain with physical stages disabled
 (the numeric floor under every audible effect), the emergent inner-groove treble loss,
 mono → flat-vertical groove geometry, deterministic click seeding, API contracts, and a
 pipeline wall-clock budget.
+
+Frontend audio-graph tests (no browser or audio device needed):
+
+```bash
+cd frontend
+npm test
+```
 
 ## Deploying
 

@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Callable
+from typing import Literal
 
 import numpy as np
 
@@ -31,6 +32,7 @@ from app.dsp.cutting.spatial_map import SpiralMap
 from app.dsp.filters import leaky_integrate, matched_differentiate
 from app.dsp.groove_medium import compliance, stylus_contact
 from app.dsp.playback import clicks_pops, crosstalk, surface_noise, wow_flutter
+from app.dsp.playback.sampled_surface import SURFACE_GAIN, mix_sampled_surface, sample_at_rate
 from app.groove.geometry import GrooveGeometry, build as build_geometry
 
 
@@ -45,6 +47,8 @@ class PipelineConfig:
     clicks: bool = True
     crosstalk: bool = True
     noise: bool = True
+    surface_sound: Literal["physical", "codrops"] = "physical"
+    retain_detail: bool = True
 
     start_radius_mm: float = OUTER_RADIUS_M * 1000.0
     stylus_size: float = 1.0
@@ -174,7 +178,9 @@ def run(
     from scipy.signal import resample_poly as _resample_poly
 
     detail_factor = max(1, -(-lat_s.shape[0] // MAX_DETAIL_SAMPLES))  # ceil div
-    if detail_factor > 1:
+    if not config.retain_detail:
+        detail_lat = detail_vert = None
+    elif detail_factor > 1:
         detail_lat = _resample_poly(lat_s, 1, detail_factor).astype(np.float32)
         detail_vert = _resample_poly(vert_s, 1, detail_factor).astype(np.float32)
     else:
@@ -205,7 +211,7 @@ def run(
     left, right = mid_side.decode(lat_out, vert_out)
 
     report(0.88, "Dust, noise & preamp")
-    if config.clicks:
+    if config.clicks and config.surface_sound == "physical":
         cl = clicks_pops.process(spiral, sample_rate, rng, density_scale=config.click_density)
         left = left + cl.left_add
         right = right + cl.right_add
@@ -215,7 +221,7 @@ def run(
             "rate_inner_hz": cl.rate_inner_hz,
         }
 
-    if config.noise:
+    if config.noise and config.surface_sound == "physical":
         nz = surface_noise.process(n, sample_rate, rng, level_scale=config.noise_level)
         left = left + nz.left_add
         right = right + nz.right_add
@@ -232,6 +238,17 @@ def run(
     vinyl = np.stack([left, right], axis=1)
     if config.riaa:
         vinyl = riaa.de_emphasis(vinyl, sample_rate)
+
+    # Codrops plays its recorded surface sample after the music processing.
+    # Replace the old dust/noise additions, retaining every warmth stage.
+    if config.surface_sound == "codrops" and (config.clicks or config.noise):
+        vinyl = mix_sampled_surface(vinyl, sample_rate, config.noise_level)
+        gain = SURFACE_GAIN * config.noise_level / 4.0
+        rms = float(np.sqrt(np.mean(sample_at_rate(sample_rate) ** 2))) * gain
+        metrics["noise"] = {
+            "sample_gain": gain,
+            "noise_floor_dbfs": 20 * float(np.log10(max(rms, 1e-12))),
+        }
 
     np.clip(vinyl, -1.0, 1.0, out=vinyl)
     return PipelineResult(

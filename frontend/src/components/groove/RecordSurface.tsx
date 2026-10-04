@@ -13,8 +13,8 @@
  * Clicking the surface seeks playback via the inverse spiral map.
  */
 
-import { useEffect, useMemo } from "react";
-import type { ThreeEvent } from "@react-three/fiber";
+import { useEffect, useLayoutEffect, useMemo } from "react";
+import { useThree, type ThreeEvent } from "@react-three/fiber";
 import * as THREE from "three";
 
 import type { GrooveGeometry } from "../../types/api";
@@ -56,13 +56,20 @@ function makePolarRing(): THREE.RingGeometry {
 export default function RecordSurface({ geometry, onScrub, receiveShadow = true }: Props) {
   const ringGeo = useMemo(() => makePolarRing(), []);
   const surface = useMemo(() => makeVinylSurfaceMaterial(geometry), [geometry]);
+  const gl = useThree((s) => s.gl);
+  useLayoutEffect(() => {
+    if (surface.material.normalMap) gl.initTexture(surface.material.normalMap);
+    if (surface.material.roughnessMap) gl.initTexture(surface.material.roughnessMap);
+  }, [gl, surface]);
   useEffect(
     () => () => {
       surface.dispose();
-      ringGeo.dispose();
     },
-    [surface, ringGeo],
+    [surface],
   );
+  // The shared ring survives a material change; disposing it from the old
+  // material's cleanup made the next record briefly use a deleted GPU buffer.
+  useEffect(() => () => ringGeo.dispose(), [ringGeo]);
 
   const durationS = geometry.timeS[geometry.timeS.length - 1];
   const pitchMm = geometry.meta.groove_pitch_um / 1000;
@@ -78,7 +85,7 @@ export default function RecordSurface({ geometry, onScrub, receiveShadow = true 
     // A hair above the vinyl body (top at -0.4) so the surface wins the
     // depth test cleanly.
     <mesh
-      position={[0, -0.36, 0]}
+      position={[0, -0.16, 0]}
       rotation={[-Math.PI / 2, 0, 0]}
       geometry={ringGeo}
       material={surface.material}

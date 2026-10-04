@@ -17,6 +17,7 @@
  */
 
 import { useEffect, useMemo, useState } from "react";
+import { useShallow } from "zustand/react/shallow";
 
 import { useStore } from "../../state/store";
 import {
@@ -28,7 +29,10 @@ import {
 
 /** One beat's optional call to action, degraded gracefully with no record. */
 function BeatAction({ beat }: { beat: StoryBeat }) {
-  const { analysis, processResult, loading, setTab, useDemo } = useStore();
+  const { analysis, processResult, loading, setTab, useDemo } = useStore(useShallow((s) => ({
+    analysis: s.analysis, processResult: s.processResult, loading: s.loading,
+    setTab: s.setTab, useDemo: s.useDemo,
+  })));
   const ready = analysis !== null && processResult !== null;
 
   if (!beat.action) return null;
@@ -65,7 +69,9 @@ function Beat({
 }
 
 export default function ExplorerTab() {
-  const { explorerFocus, clearExplorerFocus } = useStore();
+  const { explorerFocus, clearExplorerFocus } = useStore(useShallow((s) => ({
+    explorerFocus: s.explorerFocus, clearExplorerFocus: s.clearExplorerFocus,
+  })));
   const [selectedKey, setSelectedKey] = useState(ALL_CHAPTERS[0].key);
 
   // Sidebar deep links: honour the requested chapter, then clear the request.
@@ -116,7 +122,6 @@ export default function ExplorerTab() {
                 </span>
                 <span className="rail-text">
                   <span className="rail-name">{chapter.title}</span>
-                  <span className="rail-sub">{chapter.label}</span>
                 </span>
               </button>
             ))}

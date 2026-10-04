@@ -6,6 +6,8 @@ change it there.
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 from app.dsp.constants import INNER_RADIUS_M, OUTER_RADIUS_M
@@ -41,6 +43,8 @@ class ProcessRequest(BaseModel):
     clicks: bool = True
     crosstalk: bool = True
     noise: bool = True
+    surface_sound: Literal["physical", "codrops"] = "physical"
+    retain_detail: bool = True
 
     # Defaults describe a well-worn record: at 1.0x-everything the differences
     # are real but easy to miss on laptop speakers. 1.0 on every scale is

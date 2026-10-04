@@ -1,205 +1,205 @@
 /**
- * TurntableScene — the complete deck, now with a multiscale groove.
- *
- * Coordinate convention (see recordMotion.ts): record in the XZ plane, +Y
- * up, spindle at the world origin, disc rotates about Y, TRUE millimeters
- * everywhere. The RECORD GROUP (vinyl, groove surface, label, spindle,
- * microscope trench) spins as one unit at 33 1/3 RPM against the audio
- * clock; the tonearm and micro-stylus stay in world space.
- *
- * LOD wiring (strategy in grooveLod.ts):
- *   - RecordSurface carries the procedural groove shader (overview/close-up);
- *   - GrooveInspectionMesh + MicroStylus mount only while the camera is
- *     within MICRO_ENTER_MM of the stylus (hysteresis on exit);
- *   - mode buttons fly the camera; renderers switch purely by distance.
- *
- * Per-frame work: record rotation, tonearm yaw + cantilever offset,
- * micro-stylus transform, camera animation/follow. Everything else updates
- * only on data or control changes.
+ * The listening room. Static furniture is batched once; only the camera,
+ * platter, record swap and tonearm animate. Demand rendering sleeps when
+ * paused, hidden, or reading the story.
  */
-
-import { useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { OrbitControls } from "@react-three/drei";
-import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import * as THREE from "three";
-import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
 
 import type { GrooveGeometry } from "../../types/api";
+import { engine, useStore } from "../../state/store";
 import DevCapture, { EagerResizeObserver } from "./DevCapture";
-import GrooveInspectionMesh, { MicroStylus } from "./GrooveInspectionMesh";
 import RecordSurface from "./RecordSurface";
 import Tonearm from "./Tonearm";
-import { type ChannelView } from "./grooveMath";
-import {
-  MICRO_ENTER_MM,
-  MICRO_EXIT_MM,
-  OVERVIEW_POSE,
-  ROOM_OVERVIEW_POSE,
-  poseFor,
-  type LodMode,
-} from "./grooveLod";
 import { makeLabelTexture } from "./labelTexture";
-import { clipTime, contact, discAngle } from "./recordMotion";
+import { clipTime, discAngle } from "./recordMotion";
+import { poseFor } from "./grooveLod";
 import ListeningRoom from "./room/ListeningRoom";
 import { projectUV } from "./room/geom";
 import * as kit from "./room/kit";
-import { CAMERA_BOUNDS, CONSOLE } from "./room/layout";
-import { detectQuality } from "./room/quality";
-
-export type EnvironmentKind = "cafe" | "studio";
-
-export interface FlyRequest {
-  mode: LodMode;
-  seq: number; // increment to trigger the flight
-}
+import { CAMERA_BOUNDS } from "./room/layout";
+import { adjustResolution, detectQuality, resolutionFor, type Quality } from "./room/quality";
 
 interface Props {
   geometry: GrooveGeometry;
   filename: string;
   sessionId: string;
-  dataVersion: unknown;
-  environment: EnvironmentKind;
-  view: ChannelView;
-  audioBoost: number;
-  cutaway: boolean;
-  guides: boolean;
-  follow: boolean;
-  stylusSizeScale: number;
-  debug: boolean;
-  fly: FlyRequest;
-  resetSignal: number;
+  active: boolean;
   onScrub: (t: number) => void;
-  onMicroActive: (active: boolean) => void;
-  /** Called once shaders are compiled and the first frame can be shown. */
+  cueEnabled: boolean;
+  onCueStart: () => void;
+  onCueMove: (t: number) => void;
+  onCueEnd: () => void;
   onReady?: () => void;
-  /** Width (px) of UI overlaying the canvas's right edge; the camera's
-   * frame is shifted so the subject centres in the unobstructed part. */
-  insetRight?: number;
 }
 
-/**
- * Image-based lighting from three's built-in RoomEnvironment (a procedural
- * lit studio box, PMREM-filtered once at mount — no HDR downloads, no CSP
- * concerns). This is what makes the glossy black vinyl, clearcoat and
- * brushed aluminum read as SHAPE: their form comes from reflections, not
- * from brightening the materials.
- */
-function EnvironmentReflections({ intensity }: { intensity: number }) {
-  const gl = useThree((s) => s.gl);
-  const scene = useThree((s) => s.scene);
-  useEffect(() => {
-    const pmrem = new THREE.PMREMGenerator(gl);
-    const envMap = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-    scene.environment = envMap;
-    return () => {
-      scene.environment = null;
-      envMap.dispose();
-      pmrem.dispose();
-    };
-  }, [gl, scene]);
-  useEffect(() => {
-    scene.environmentIntensity = intensity;
-  }, [scene, intensity]);
-  return null;
-}
-
-/** Pressing eccentricity shown visually (mm). The DSP already models the
- * off-center spindle hole as wow; this is the same defect made visible: the
- * record's groove pattern orbits the spindle by a fraction of a millimeter,
- * so the rim and rings visibly breathe once per revolution — the strongest
- * "it is actually spinning" cue a real deck gives you. */
-const ECCENTRICITY_MM = 0.45; // IEC allows up to ~0.9 mm; this is a mid case
-
-/** Spins its children as the platter: rotation.y = discAngle(clipTime()).
- * An inner group carries the eccentric offset IN THE ROTATING FRAME (that is
- * what makes it wobble rather than sit still), fading to zero as the camera
- * closes in so the microscope trench stays exactly under the stylus. */
 function SpinningRecord({ children }: { children: React.ReactNode }) {
   const rot = useRef<THREE.Group>(null);
-  const off = useRef<THREE.Group>(null);
-  const camera = useThree((s) => s.camera);
   useFrame(() => {
     if (rot.current) rot.current.rotation.y = discAngle(clipTime());
-    if (off.current) {
-      const d = camera.position.length();
-      off.current.position.x = ECCENTRICITY_MM * THREE.MathUtils.smoothstep(d, 120, 320);
-    }
   });
-  return (
-    <group ref={rot}>
-      <group ref={off}>{children}</group>
-    </group>
-  );
-}
-
-/** Distance-gated microscope visibility with hysteresis (no flicker). */
-function MicroGate({ onChange }: { onChange: (active: boolean) => void }) {
-  const camera = useThree((s) => s.camera);
-  const active = useRef(false);
-  useFrame(() => {
-    const d = Math.hypot(
-      camera.position.x - contact.x,
-      camera.position.y,
-      camera.position.z - contact.z,
-    );
-    if (!active.current && d < MICRO_ENTER_MM) {
-      active.current = true;
-      onChange(true);
-    } else if (active.current && d > MICRO_EXIT_MM) {
-      active.current = false;
-      onChange(false);
-    }
-  });
-  return null;
+  return <group ref={rot}>{children}</group>;
 }
 
 function Record({
-  geometry,
-  filename,
-  onScrub,
-  microscope,
-  children,
+  geometry, filename, onScrub, onPrepared,
 }: {
   geometry: GrooveGeometry;
   filename: string;
   onScrub: (t: number) => void;
-  microscope: boolean;
-  children?: React.ReactNode;
+  onPrepared: () => void;
 }) {
+  const group = useRef<THREE.Group>(null);
+  const gl = useThree((s) => s.gl);
   const labelTex = useMemo(() => makeLabelTexture(filename), [filename]);
   useEffect(() => () => labelTex.dispose(), [labelTex]);
+  useLayoutEffect(() => {
+    gl.initTexture(labelTex);
+    // All record materials share the shaders warmed with the first pressing.
+    // Upload maps before revealing a swap, without racing a second compiler
+    // against the full room's asynchronous warm-up.
+    onPrepared();
+  }, [gl, labelTex, geometry, onPrepared]);
 
   return (
-    <SpinningRecord>
-      {/* Vinyl body (sides + thickness); the top face is RecordSurface.
-          Polished black PVC: near-black base, hard clearcoat — its shape is
-          drawn entirely by environment + light reflections. */}
-      <mesh castShadow receiveShadow position={[0, -2.4, 0]}>
-        <cylinderGeometry args={[152, 152, 4, 128]} />
-        <meshPhysicalMaterial
-          color="#0d0d10"
-          roughness={0.34}
-          metalness={0.05}
-          clearcoat={1.0}
-          clearcoatRoughness={0.14}
-          envMapIntensity={1.25}
-        />
-      </mesh>
-      <RecordSurface geometry={geometry} onScrub={onScrub} receiveShadow={!microscope} />
-      {/* Label (wobbles with the record — it is printed on it; the spindle
-          lives in Deck, centered, since the record wobbles AROUND it). */}
-      <mesh position={[0, 0.2, 0]}>
-        <cylinderGeometry args={[50, 50, 1.2, 64]} />
-        <meshStandardMaterial color="#a06a1f" roughness={0.7} />
-      </mesh>
-      <mesh position={[0, 0.82, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-        <circleGeometry args={[49.5, 64]} />
-        <meshStandardMaterial map={labelTex} roughness={0.75} />
-      </mesh>
-      {children}
-    </SpinningRecord>
+    <group ref={group}>
+      <SpinningRecord>
+        {/* Open sides avoid a duplicate top face underneath the groove map.
+            The old 0.04 mm gap caused z-fighting as the record landed. */}
+        <mesh castShadow position={[0, -2.4, 0]}>
+          <cylinderGeometry args={[152, 152, 4, 96, 1, true]} />
+          <meshStandardMaterial color="#0d0d10" roughness={0.34} metalness={0.05} />
+        </mesh>
+        <mesh position={[0, -0.36, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+          <circleGeometry args={[152, 96]} />
+          <meshStandardMaterial color="#0d0d10" roughness={0.34} />
+        </mesh>
+        <RecordSurface geometry={geometry} onScrub={onScrub} receiveShadow={false} />
+        <mesh position={[0, 0.2, 0]}>
+          <cylinderGeometry args={[50, 50, 1.2, 48]} />
+          <meshStandardMaterial color="#181318" roughness={0.72} />
+        </mesh>
+        <mesh position={[0, 1.05, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+          <circleGeometry args={[49.5, 48]} />
+          <meshStandardMaterial map={labelTex} roughness={0.75} polygonOffset polygonOffsetFactor={-1} polygonOffsetUnits={-1} />
+        </mesh>
+      </SpinningRecord>
+    </group>
+  );
+}
+
+interface RecordData {
+  geometry: GrooveGeometry;
+  filename: string;
+  sessionId: string;
+}
+
+function RecordChanger({
+  target, onScrub, cueEnabled, onCueStart, onCueMove, onCueEnd,
+}: {
+  target: RecordData;
+  onScrub: (t: number) => void;
+  cueEnabled: boolean;
+  onCueStart: () => void;
+  onCueMove: (t: number) => void;
+  onCueEnd: () => void;
+}) {
+  const carrier = useRef<THREE.Group>(null);
+  const [shown, setShown] = useState(target);
+  const [swapping, setSwapping] = useState(false);
+  const pending = useRef(target);
+  const phase = useRef<"idle" | "out" | "waiting" | "in">("idle");
+  const elapsed = useRef(0);
+  const arrival = useRef({ x: 420, z: 45, tiltX: 0.1, tiltZ: -0.22 });
+  const invalidate = useThree((s) => s.invalidate);
+  const scene = useThree((s) => s.scene);
+
+  useEffect(() => {
+    pending.current = target;
+    if (target.sessionId === shown.sessionId) {
+      if (phase.current === "idle" && target !== shown) setShown(target);
+      return;
+    }
+    if (phase.current === "idle") {
+      elapsed.current = 0;
+      phase.current = "out";
+      setSwapping(true);
+      invalidate();
+    }
+  }, [target, shown, invalidate]);
+
+  const prepared = useCallback(() => {
+    const group = carrier.current;
+    if (phase.current === "waiting" && group) {
+      arrival.current = { x: 420, z: 45, tiltX: 0.1, tiltZ: -0.22 };
+      group.position.set(420, 105, 45);
+      group.rotation.set(0.1, 0, -0.22);
+      group.visible = true;
+      elapsed.current = 0;
+      phase.current = "in";
+    }
+    invalidate();
+  }, [invalidate]);
+
+  useFrame((_, delta) => {
+    const group = carrier.current;
+    if (!group || phase.current === "idle" || phase.current === "waiting") return;
+    invalidate();
+    elapsed.current += Math.min(delta, 0.05);
+    if (phase.current === "out") {
+      const p = Math.min(1, elapsed.current / 0.72);
+      const eased = p * p * (3 - 2 * p);
+      group.position.set(-420 * eased, 105 * Math.sin(p * Math.PI * 0.58), -45 * eased);
+      group.rotation.set(-0.1 * eased, 0, 0.22 * eased);
+      if (p >= 1) {
+        // A quick change back to the currently shown disc needs no remount.
+        // Waiting for its mount callback would leave the carrier hidden forever.
+        if (pending.current.sessionId === shown.sessionId) {
+          arrival.current = { x: -420, z: -45, tiltX: -0.1, tiltZ: 0.22 };
+          elapsed.current = 0;
+          phase.current = "in";
+        } else {
+          // Upload the replacement maps before revealing the incoming disc.
+          group.visible = false;
+          phase.current = "waiting";
+          setShown(pending.current);
+        }
+      }
+      return;
+    }
+    const p = Math.min(1, elapsed.current / 0.88);
+    const eased = p * p * (3 - 2 * p);
+    const remaining = 1 - eased;
+    const from = arrival.current;
+    group.position.set(from.x * remaining, 105 * Math.sin((1 - p) * Math.PI * 0.58), from.z * remaining);
+    group.rotation.set(from.tiltX * remaining, 0, from.tiltZ * remaining);
+    if (p >= 1) {
+      group.position.set(0, 0, 0);
+      group.rotation.set(0, 0, 0);
+      scene.userData.shadowRevision = (scene.userData.shadowRevision ?? 0) + 1;
+      if (pending.current.sessionId !== shown.sessionId) {
+        elapsed.current = 0;
+        phase.current = "out";
+      } else {
+        phase.current = "idle";
+        setSwapping(false);
+      }
+    }
+  });
+
+  return (
+    <>
+      <group ref={carrier}>
+        <Record key={shown.sessionId} geometry={shown.geometry}
+          filename={shown.filename} onScrub={cueEnabled && !swapping ? onScrub : () => {}}
+          onPrepared={prepared} />
+      </group>
+      <Tonearm geometry={shown.geometry} view="both"
+        cueEnabled={cueEnabled && !swapping} raised={swapping}
+        onCueStart={onCueStart} onCueMove={onCueMove} onCueEnd={onCueEnd} />
+    </>
   );
 }
 
@@ -280,7 +280,7 @@ function Deck() {
       ))}
       {/* Platter assembly SPINS: machined aluminium rim (the circumferential
           brushing reads as rotation), a rubber mat under the record. The
-          platter turns dead-centered; the record wobbles around it. */}
+          platter and record both turn dead-centered. */}
       <SpinningPlatter>
         <mesh castShadow receiveShadow position={[0, -11.4, 0]} material={kit.brushedAlu()}>
           <cylinderGeometry args={[158, 157, 10, 128]} />
@@ -294,9 +294,8 @@ function Deck() {
           <cylinderGeometry args={[157.2, 158.4, 1.2, 128]} />
           <meshStandardMaterial color="#d8d6d0" metalness={1} roughness={0.12} envMapIntensity={1.2} />
         </mesh>
-        {/* Spindle: centered on the platter axis; the eccentric record
-            wobbles around it, exactly like a mis-punched pressing (the
-            visual twin of the DSP's wow model). */}
+        {/* Spindle stays centered. Audio wow remains in the DSP without
+            introducing subpixel wobble/shimmer in the displayed record. */}
         <mesh castShadow position={[0, 2.5, 0]}>
           <cylinderGeometry args={[3.4, 3.4, 7, 24]} />
           <meshStandardMaterial color="#9a9aa2" metalness={0.9} roughness={0.2} />
@@ -306,314 +305,201 @@ function Deck() {
   );
 }
 
-/** Orbit + preset flights + optional stylus-follow. */
-function CameraRig({
-  environment,
-  resetSignal,
-  fly,
-  follow,
-  insetRight,
-}: {
-  environment: EnvironmentKind;
-  resetSignal: number;
-  fly: FlyRequest;
-  follow: boolean;
-  insetRight: number;
-}) {
-  const controls = useRef<OrbitControlsImpl>(null);
+
+/** Pointer position drives a bounded, eased orbit. There is no button hold
+ * requirement. Touch screens retain a one-finger look gesture. */
+function CameraRig({ active }: { active: boolean }) {
   const camera = useThree((s) => s.camera) as THREE.PerspectiveCamera;
+  const gl = useThree((s) => s.gl);
   const size = useThree((s) => s.size);
-  const room = environment === "cafe";
-
-  // Shift the frame (not the camera) so the subject centres in the part of
-  // the canvas the inspection panel leaves visible. filmOffset skews the
-  // projection, so orbiting, raycasts and scrubbing stay exact.
-  useEffect(() => {
-    camera.fov = room ? 38 : 34;
-    const inset = Math.min(insetRight, size.width * 0.45);
-    const aspect = size.width / Math.max(size.height, 1);
-    camera.filmOffset =
-      size.width > 0 ? (camera.getFilmWidth() * aspect * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * inset) / size.width : 0;
-    camera.updateProjectionMatrix();
-  }, [camera, room, insetRight, size.width, size.height]);
-
-  // Switching environment re-frames to that environment's overview.
-  const firstEnv = useRef(true);
-  useEffect(() => {
-    if (firstEnv.current) {
-      firstEnv.current = false;
-      return;
-    }
-    const c = controls.current;
-    if (!c) return;
-    const pose = poseFor("overview", contact, room, size.width / Math.max(size.height, 1));
-    anim.current = {
-      t: 0,
-      fromPos: camera.position.clone(),
-      fromTarget: c.target.clone(),
-      toPos: new THREE.Vector3(...pose.position),
-      toTarget: new THREE.Vector3(...pose.target),
-    };
-    c.target0.set(...pose.target);
-    c.position0.set(...pose.position);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [room]);
-  const anim = useRef<{
-    t: number;
-    fromPos: THREE.Vector3;
-    fromTarget: THREE.Vector3;
-    toPos: THREE.Vector3;
-    toTarget: THREE.Vector3;
-  } | null>(null);
+  const invalidate = useThree((s) => s.invalidate);
+  const pointer = useRef({ x: 0, y: 0, zoom: 1, held: false });
+  const focus = useRef(new THREE.Vector3());
+  const base = useRef(new THREE.Spherical());
+  const desired = useRef(new THREE.Vector3());
+  const bounds = useMemo(() => ({
+    min: new THREE.Vector3(...CAMERA_BOUNDS.min),
+    max: new THREE.Vector3(...CAMERA_BOUNDS.max),
+  }), []);
 
   useEffect(() => {
-    // Start from the overview fitted to this canvas's shape, and make that
-    // the pose "Reset camera" returns to.
-    const c = controls.current;
-    if (!c) return;
-    const pose = poseFor("overview", contact, room, size.width / Math.max(size.height, 1));
+    const pose = poseFor("overview", { x: 0, z: 0 }, true, size.width / Math.max(size.height, 1));
+    focus.current.set(...pose.target);
+    base.current.setFromVector3(new THREE.Vector3(...pose.position).sub(focus.current));
     camera.position.set(...pose.position);
-    c.target.set(...pose.target);
-    c.update();
-    c.saveState();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-  useEffect(() => {
-    if (resetSignal > 0) {
-      anim.current = null;
-      controls.current?.reset();
-    }
-  }, [resetSignal]);
+    camera.fov = 38;
+    camera.filmOffset = 0;
+    camera.lookAt(focus.current);
+    camera.updateProjectionMatrix();
+    invalidate();
+  }, [camera, size.width, size.height, invalidate]);
 
-  // A new fly request captures start/end poses; user interaction cancels it.
   useEffect(() => {
-    if (fly.seq === 0 || !controls.current) return;
-    const pose = poseFor(fly.mode, { x: contact.x, z: contact.z }, room, size.width / Math.max(size.height, 1));
-    anim.current = {
-      t: 0,
-      fromPos: camera.position.clone(),
-      fromTarget: controls.current.target.clone(),
-      toPos: new THREE.Vector3(...pose.position),
-      toTarget: new THREE.Vector3(...pose.target),
+    const el = gl.domElement;
+    el.tabIndex = 0;
+    el.setAttribute("aria-label", "Listening room. Move your pointer to look around; scroll to zoom.");
+    const move = (e: PointerEvent) => {
+      if (!active || useStore.getState().cueing || (e.pointerType === "mouse" && e.buttons)) return;
+      if (e.pointerType !== "mouse" && !pointer.current.held) return;
+      const r = el.getBoundingClientRect();
+      pointer.current.x = THREE.MathUtils.clamp(((e.clientX - r.left) / r.width - 0.5) * 2, -1, 1);
+      pointer.current.y = THREE.MathUtils.clamp(((e.clientY - r.top) / r.height - 0.5) * 2, -1, 1);
+      invalidate();
     };
-    const cancel = () => {
-      anim.current = null;
+    const leave = () => { pointer.current.x = pointer.current.y = 0; pointer.current.held = false; invalidate(); };
+    const down = () => { pointer.current.held = true; };
+    const up = () => { pointer.current.held = false; };
+    const wheel = (e: WheelEvent) => {
+      if (!active || useStore.getState().cueing) return;
+      e.preventDefault();
+      pointer.current.zoom = THREE.MathUtils.clamp(pointer.current.zoom * Math.exp(e.deltaY * 0.001), 0.48, 1.55);
+      invalidate();
     };
-    const c = controls.current;
-    c.addEventListener("start", cancel);
-    return () => c.removeEventListener("start", cancel);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fly.seq, fly.mode, camera]);
+    const key = (e: KeyboardEvent) => {
+      const p = pointer.current;
+      if (e.key === "ArrowLeft") p.x = Math.max(-1, p.x - 0.2);
+      else if (e.key === "ArrowRight") p.x = Math.min(1, p.x + 0.2);
+      else if (e.key === "ArrowUp") p.y = Math.max(-1, p.y - 0.2);
+      else if (e.key === "ArrowDown") p.y = Math.min(1, p.y + 0.2);
+      else if (e.key === "Home") { p.x = p.y = 0; p.zoom = 1; }
+      else return;
+      e.preventDefault(); invalidate();
+    };
+    el.addEventListener("pointermove", move);
+    el.addEventListener("pointerleave", leave);
+    el.addEventListener("pointerdown", down);
+    window.addEventListener("pointerup", up);
+    el.addEventListener("wheel", wheel, { passive: false });
+    el.addEventListener("keydown", key);
+    return () => {
+      el.removeEventListener("pointermove", move);
+      el.removeEventListener("pointerleave", leave);
+      el.removeEventListener("pointerdown", down);
+      window.removeEventListener("pointerup", up);
+      el.removeEventListener("wheel", wheel);
+      el.removeEventListener("keydown", key);
+    };
+  }, [active, gl, invalidate]);
 
   useFrame((_, delta) => {
-    const c = controls.current;
-    if (!c) return;
-    if (anim.current) {
-      const a = anim.current;
-      a.t = Math.min(a.t + delta / 0.9, 1);
-      const e = a.t * a.t * (3 - 2 * a.t); // smoothstep ease
-      camera.position.lerpVectors(a.fromPos, a.toPos, e);
-      c.target.lerpVectors(a.fromTarget, a.toTarget, e);
-      if (a.t >= 1) anim.current = null;
-    } else if (follow) {
-      // Gentle re-aim at the (slowly drifting) contact point.
-      c.target.lerp(new THREE.Vector3(contact.x, -0.1, contact.z), 0.06);
-    }
-    c.update();
-
-    if (room) {
-      // Keep the camera inside the room and out of the furniture: clamp to
-      // the room box, and never inside the console's body.
-      const p = camera.position;
-      p.x = THREE.MathUtils.clamp(p.x, CAMERA_BOUNDS.min[0], CAMERA_BOUNDS.max[0]);
-      p.y = THREE.MathUtils.clamp(p.y, CAMERA_BOUNDS.min[1], CAMERA_BOUNDS.max[1]);
-      p.z = THREE.MathUtils.clamp(p.z, CAMERA_BOUNDS.min[2], CAMERA_BOUNDS.max[2]);
-      const overConsole = p.x > CONSOLE.x0 - 30 && p.x < CONSOLE.x1 + 30 && p.z > CONSOLE.z0 && p.z < CONSOLE.z1 + 30;
-      if (overConsole && p.y < CONSOLE.top + 12) p.y = CONSOLE.top + 12;
-    }
+    if (!active || useStore.getState().cueing) return;
+    const p = pointer.current;
+    const b = base.current;
+    const theta = b.theta + p.x * 0.68;
+    const phi = THREE.MathUtils.clamp(b.phi + p.y * 0.20, 0.75, 1.42);
+    const radius = b.radius * p.zoom;
+    desired.current.set(
+      radius * Math.sin(phi) * Math.sin(theta),
+      radius * Math.cos(phi),
+      radius * Math.sin(phi) * Math.cos(theta),
+    ).add(focus.current);
+    desired.current.clamp(bounds.min, bounds.max);
+    if (camera.position.distanceToSquared(desired.current) < 0.04) return;
+    camera.position.lerp(desired.current, 1 - Math.exp(-5 * Math.min(delta, 0.05)));
+    camera.lookAt(focus.current);
+    invalidate();
   });
-
-  // Stable across environment switches (the switch animates instead).
-  const initial = useRef(room ? ROOM_OVERVIEW_POSE : OVERVIEW_POSE).current;
-  return (
-    <OrbitControls
-      ref={controls}
-      target={initial.target}
-      minDistance={0.6}
-      maxDistance={room ? 2300 : 900}
-      minPolarAngle={room ? Math.PI * 0.18 : 0}
-      maxPolarAngle={Math.PI * (room ? 0.49 : 0.47)}
-      minAzimuthAngle={room ? -0.8 : -Infinity}
-      maxAzimuthAngle={room ? 1.05 : Infinity}
-      enableDamping
-      makeDefault
-    />
-  );
-}
-
-/**
- * Compiles every material in the scene before the canvas is revealed.
- * Uses KHR_parallel_shader_compile where the browser offers it, so the
- * compile happens off the main thread and the loading screen keeps moving;
- * without it this degrades to an ordinary (blocking) compile.
- */
-function WarmUp({ armed, onReady }: { armed: boolean; onReady?: () => void }) {
-  const gl = useThree((s) => s.gl);
-  const scene = useThree((s) => s.scene);
-  const camera = useThree((s) => s.camera);
-  const fired = useRef(false);
-  useEffect(() => {
-    if (!armed || fired.current) return;
-    let done = false;
-    const finish = () => {
-      if (done) return;
-      done = true;
-      fired.current = true;
-      onReady?.();
-    };
-    const id = window.setTimeout(async () => {
-      try {
-        await gl.compileAsync(scene, camera);
-      } catch {
-        /* a failed pre-compile just means compiling on first draw */
-      }
-      // Let one real frame draw (shadow-map programs compile there) before
-      // lifting the curtain; the timeout covers throttled background tabs.
-      requestAnimationFrame(() => requestAnimationFrame(finish));
-      window.setTimeout(finish, 500);
-    }, 0);
-    return () => {
-      done = true;
-      window.clearTimeout(id);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [armed]);
   return null;
 }
 
-/** Releases the room's shared textures and materials with the canvas. */
+/** Keep the non-visual savings, with a sharp resolution floor. Only measure
+ * continuous playback, not sparse demand frames while paused. */
+function RenderBudget({ active, ready, quality, targetDpr }: {
+  active: boolean; ready: boolean; quality: Quality; targetDpr: number;
+}) {
+  const invalidate = useThree((s) => s.invalidate);
+  const setDpr = useThree((s) => s.setDpr);
+  const setFrameloop = useThree((s) => s.setFrameloop);
+  const gl = useThree((s) => s.gl);
+  const measured = useRef({ sum: 0, n: 0 });
+  const resume = useCallback(() => { if (active && !document.hidden) invalidate(); }, [active, invalidate]);
+  useEffect(() => {
+    const visibility = () => {
+      setFrameloop(active && !document.hidden ? "demand" : "never");
+      resume();
+    };
+    visibility();
+    const unsub = useStore.subscribe((s, prev) => {
+      if (s.playing !== prev.playing || s.positionS !== prev.positionS || s.cueing !== prev.cueing) resume();
+    });
+    document.addEventListener("visibilitychange", visibility);
+    return () => { unsub(); document.removeEventListener("visibilitychange", visibility); };
+  }, [active, resume, setFrameloop]);
+  useFrame((_, delta) => {
+    if (!active || document.hidden) return;
+    if (engine.isPlaying || useStore.getState().cueing) invalidate();
+    if (!ready || !engine.isPlaying || delta > 0.12 || delta < 0.001) {
+      measured.current.sum = measured.current.n = 0;
+      return;
+    }
+    const m = measured.current;
+    m.sum += delta; m.n++;
+    if (m.n < 240) return;
+    const mean = m.sum / m.n;
+    const ratio = gl.getPixelRatio();
+    const next = adjustResolution(quality, ratio, targetDpr, mean);
+    if (Math.abs(next - ratio) > 0.001) setDpr(next);
+    m.sum = m.n = 0;
+  });
+  return null;
+}
+
+function WarmUp({ armed, onReady }: { armed: boolean; onReady: () => void }) {
+  const gl = useThree((s) => s.gl);
+  const scene = useThree((s) => s.scene);
+  const camera = useThree((s) => s.camera);
+  const invalidate = useThree((s) => s.invalidate);
+  useEffect(() => {
+    if (!armed) return;
+    let alive = true;
+    void gl.compileAsync(scene, camera).catch(() => undefined).then(() => {
+      if (!alive) return;
+      scene.userData.shadowRevision = (scene.userData.shadowRevision ?? 0) + 1;
+      invalidate();
+      // Reveal only after a real rendered frame, without a delayed timer
+      // capable of updating an unmounted component.
+      requestAnimationFrame(() => { if (alive) onReady(); });
+    });
+    return () => { alive = false; };
+  }, [armed, gl, scene, camera, invalidate, onReady]);
+  return null;
+}
+
 function KitLifetime() {
   useEffect(() => () => kit.disposeKit(), []);
   return null;
 }
 
-function StudioLights() {
-  return (
-    <group>
-      {/* Hemisphere skylight: soft top-down fill with a warm floor bounce —
-          shadows stay open without a flat ambient wash. */}
-      <hemisphereLight args={["#cdd6e4", "#3a2e22", 0.55]} />
-      <directionalLight
-        castShadow
-        position={[250, 320, 160]}
-        intensity={1.7}
-        color="#ffe8c8"
-        shadow-mapSize={[2048, 2048]}
-        shadow-camera-left={-420}
-        shadow-camera-right={420}
-        shadow-camera-top={420}
-        shadow-camera-bottom={-420}
-        shadow-camera-far={1200}
-        shadow-bias={-0.0004}
-      />
-      <directionalLight position={[-260, 180, -220]} intensity={0.6} color="#b8c8ff" />
-      {/* Rim from behind: lifts the record edge off the dark background. */}
-      <directionalLight position={[-40, 190, -420]} intensity={0.7} color="#dfe8f5" />
-    </group>
-  );
-}
-
-export default function TurntableScene({
-  geometry,
-  filename,
-  sessionId,
-  dataVersion,
-  environment,
-  view,
-  audioBoost,
-  cutaway,
-  guides,
-  follow,
-  stylusSizeScale,
-  debug,
-  fly,
-  resetSignal,
-  onScrub,
-  onMicroActive,
-  onReady,
-  insetRight = 0,
+function TurntableScene({
+  geometry, filename, sessionId, active, onScrub, cueEnabled,
+  onCueStart, onCueMove, onCueEnd, onReady,
 }: Props) {
-  const cafe = environment === "cafe";
-  const quality = useMemo(() => {
-    const q = detectQuality();
-    kit.setKitQuality(q);
-    return q;
-  }, []);
-  const [microActive, setMicroActive] = useState(false);
+  const quality = useMemo(() => { const q = detectQuality(); kit.setKitQuality(q); return q; }, []);
+  const targetDpr = resolutionFor(quality, window.devicePixelRatio || 1);
   const [roomBuilt, setRoomBuilt] = useState(false);
-  const handleMicro = (active: boolean) => {
-    setMicroActive(active);
-    onMicroActive(active);
-  };
+  const [ready, setReady] = useState(false);
+  const target = useMemo(() => ({ geometry, filename, sessionId }), [geometry, filename, sessionId]);
+  const finish = useCallback(() => { setReady(true); onReady?.(); }, [onReady]);
+  const built = useCallback(() => setRoomBuilt(true), []);
 
   return (
-    <Canvas
-      shadows
-      camera={{
-        position: cafe ? ROOM_OVERVIEW_POSE.position : OVERVIEW_POSE.position,
-        fov: cafe ? 38 : 34,
-        near: 0.05,
-        far: 14000,
-      }}
-      dpr={quality === "low" ? 1 : [1, quality === "high" ? 2 : 1.5]}
-      gl={{ antialias: true, localClippingEnabled: true, logarithmicDepthBuffer: true }}
+    <Canvas shadows frameloop="demand"
+      camera={{ position: [820, 340, 760], fov: 38, near: 8, far: 9000 }}
+      dpr={targetDpr}
+      gl={{ antialias: true, powerPreference: "high-performance" }}
       resize={import.meta.env.DEV ? { polyfill: EagerResizeObserver } : undefined}
     >
-      <color attach="background" args={[cafe ? "#120d09" : "#0c0c10"]} />
+      <color attach="background" args={["#120d09"]} />
       <KitLifetime />
-      {cafe ? (
-        <ListeningRoom quality={quality} onBuilt={() => setRoomBuilt(true)} />
-      ) : (
-        <>
-          <EnvironmentReflections intensity={0.4} />
-          <StudioLights />
-        </>
-      )}
-
+      <ListeningRoom quality={quality} onBuilt={built} />
       <Deck />
-      <Record geometry={geometry} filename={filename} onScrub={onScrub} microscope={microActive}>
-        {microActive && (
-          <GrooveInspectionMesh
-            sessionId={sessionId}
-            geometry={geometry}
-            dataVersion={dataVersion}
-            view={view}
-            audioBoost={audioBoost}
-            cutaway={cutaway}
-            guides={guides}
-          />
-        )}
-      </Record>
-      {microActive && (
-        <MicroStylus
-          geometry={geometry}
-          view={view}
-          audioBoost={audioBoost}
-          stylusSizeScale={stylusSizeScale}
-        />
-      )}
-      <Tonearm geometry={geometry} view={view} microscope={microActive} debug={debug} />
-
-      <MicroGate onChange={handleMicro} />
-      <CameraRig
-        environment={environment}
-        resetSignal={resetSignal}
-        fly={fly}
-        follow={follow}
-        insetRight={insetRight}
-      />
-      <WarmUp armed={!cafe || roomBuilt} onReady={onReady} />
+      <RecordChanger target={target} onScrub={onScrub} cueEnabled={cueEnabled}
+        onCueStart={onCueStart} onCueMove={onCueMove} onCueEnd={onCueEnd} />
+      <CameraRig active={active} />
+      <WarmUp armed={roomBuilt} onReady={finish} />
+      <RenderBudget active={active} ready={ready} quality={quality} targetDpr={targetDpr} />
       {import.meta.env.DEV && <DevCapture />}
     </Canvas>
   );
 }
+export default memo(TurntableScene);

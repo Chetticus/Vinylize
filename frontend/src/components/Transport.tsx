@@ -1,9 +1,10 @@
 /**
- * Global playback bar: play/pause, sample-synced Original <-> Vinyl switch,
- * and a seek slider. Position updates on requestAnimationFrame.
+ * Global playback bar: play/pause, sample-synced Digital <-> Vinyl switch,
+ * and a seek slider. Only this small readout subscribes to the playback clock.
  */
 
 import { useEffect } from "react";
+import { useShallow } from "zustand/react/shallow";
 
 import { engine, useStore } from "../state/store";
 
@@ -16,7 +17,11 @@ export default function Transport() {
   const {
     playing, mode, positionS, volume,
     togglePlay, setMode, seek, setVolume, tick, processResult,
-  } = useStore();
+  } = useStore(useShallow((s) => ({
+    playing: s.playing, mode: s.mode, positionS: s.positionS, volume: s.volume,
+    togglePlay: s.togglePlay, setMode: s.setMode, seek: s.seek,
+    setVolume: s.setVolume, tick: s.tick, processResult: s.processResult,
+  })));
   const duration = engine.duration;
 
   // setInterval rather than requestAnimationFrame: rAF freezes in hidden or
@@ -34,10 +39,12 @@ export default function Transport() {
         {playing ? "❚❚ Pause" : "▶ Play"}
       </button>
       <div className="ab-switch" title="Smooth 65 ms crossfade — playback stays sample-synced">
-        <button className={mode === "original" ? "active" : ""} onClick={() => setMode("original")} disabled={!ready}>
-          Original
+        <button className={mode === "original" ? "active" : ""} onClick={() => setMode("original")} disabled={!ready}
+          title="Clean decoded source — no vinyl effects, room reverb or limiter">
+          Digital
         </button>
-        <button className={mode === "vinyl" ? "active" : ""} onClick={() => setMode("vinyl")} disabled={!ready}>
+        <button className={mode === "vinyl" ? "active" : ""} onClick={() => setMode("vinyl")} disabled={!ready}
+          title="Vinyl processing, surface texture and Room acoustics">
           Vinyl
         </button>
       </div>
@@ -53,7 +60,7 @@ export default function Transport() {
       <div className="time">
         {fmt(positionS)} / {fmt(duration)}
       </div>
-      <div className="volume" title={`Volume ×${volume.toFixed(2)} — 1.00× is clean; boosted output uses a safety limiter`}>
+      <div className="volume" title={`Volume ×${volume.toFixed(2)} — 1.00× is source level; Vinyl has a safety limiter, Digital is unprocessed and may clip if boosted`}>
         <span aria-hidden>{volume === 0 ? "🔇" : volume < 1.3 ? "🔉" : "🔊"}</span>
         <input
           type="range"

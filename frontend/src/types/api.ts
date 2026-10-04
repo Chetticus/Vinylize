@@ -35,6 +35,8 @@ export interface ProcessConfig {
   clicks: boolean;
   crosstalk: boolean;
   noise: boolean;
+  surface_sound: "physical" | "codrops";
+  retain_detail: boolean;
   start_radius_mm: number;
   stylus_size: number;
   saturation_drive: number;
@@ -58,6 +60,8 @@ export const DEFAULT_CONFIG: ProcessConfig = {
   clicks: true,
   crosstalk: true,
   noise: true,
+  surface_sound: "codrops",
+  retain_detail: false, // listening room does not need microscope buffers
   start_radius_mm: 146, // outer edge: the stylus drops onto the rim lead-in
   // Educational "worn favorite" preset: stronger than a clean pressing so
   // the physical effects remain obvious on laptop speakers. Use 1x controls
@@ -70,6 +74,9 @@ export const DEFAULT_CONFIG: ProcessConfig = {
   noise_level: 4,
   seed: 1109,
 };
+
+/** Complete previous sound preset, retained for an exact one-line revert. */
+export const CLASSIC_CONFIG: ProcessConfig = { ...DEFAULT_CONFIG, surface_sound: "physical" };
 
 export interface ExplorerCard {
   key: string;

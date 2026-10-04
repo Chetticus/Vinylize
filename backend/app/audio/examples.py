@@ -28,9 +28,9 @@ class Example:
 
 
 CATALOGUE: tuple[Example, ...] = (
-    Example("come-a-little-bit-closer", "Come a Little Bit Closer", "Jay & The Americans", "come-a-little-bit-closer.mp3"),
-    Example("family-business", "Family Business", "Kanye West", "family-business.mp3"),
     Example("stand-by-me", "Stand By Me", "Ben E. King", "stand-by-me.mp3"),
+    Example("nothing-can-change-this-love", "Nothing Can Change This Love", "Sam Cooke", "nothing-can-change-this-love.mp3"),
+    Example("come-a-little-bit-closer", "Come a Little Bit Closer", "Jay & The Americans", "come-a-little-bit-closer.mp3"),
 )
 
 

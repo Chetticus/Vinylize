@@ -89,6 +89,7 @@ function stripInput(geometry: GrooveGeometry): StripInput {
 
 /** Strips computed ahead of time (in a worker), keyed by clip geometry. */
 const prepared = new WeakMap<GrooveGeometry, StripPixels>();
+const preparing = new WeakMap<GrooveGeometry, Promise<void>>();
 
 /**
  * Compute this clip's strips off the main thread, so mounting the record
@@ -96,8 +97,13 @@ const prepared = new WeakMap<GrooveGeometry, StripPixels>();
  */
 export async function prepareVinylSurface(geometry: GrooveGeometry): Promise<void> {
   if (prepared.has(geometry)) return;
-  const pixels = await runInWorker<StripPixels>("buildStripPixels", [stripInput(geometry)]);
-  prepared.set(geometry, pixels);
+  const existing = preparing.get(geometry);
+  if (existing) return existing;
+  const job = runInWorker<StripPixels>("buildStripPixels", [stripInput(geometry)])
+    .then((pixels) => { prepared.set(geometry, pixels); })
+    .finally(() => preparing.delete(geometry));
+  preparing.set(geometry, job);
+  return job;
 }
 
 interface StripResult {
@@ -150,15 +156,18 @@ export function makeVinylSurfaceMaterial(geometry: GrooveGeometry): VinylSurface
     // The groove relief, view-stable (see module docstring). The base layer
     // keeps the rings visible under ordinary diffuse/spec light…
     normalMap: normal,
-    normalScale: new THREE.Vector2(1, 1),
+    normalScale: new THREE.Vector2(0.8, 0.8),
     // …and the clearcoat following the same relief is what produces the
     // pronounced circular shimmer when a light source rakes the surface.
     clearcoat: 1.0,
-    clearcoatRoughness: 0.06,
+    clearcoatRoughness: 0.1,
     clearcoatNormalMap: normal,
-    clearcoatNormalScale: new THREE.Vector2(1, 1),
+    clearcoatNormalScale: new THREE.Vector2(0.8, 0.8),
     envMapIntensity: 1.45,
     side: THREE.FrontSide,
+    polygonOffset: true,
+    polygonOffsetFactor: -1,
+    polygonOffsetUnits: -1,
   });
 
   return {

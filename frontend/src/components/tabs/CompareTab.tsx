@@ -9,60 +9,74 @@ export default function CompareTab() {
   const origPeaks = originalPeaks ?? analysis.waveform;
 
   return (
-    <div className="compare-grid">
-      <div
-        className="panel"
-        style={{ borderColor: mode === "original" ? "var(--accent)" : undefined, cursor: "pointer" }}
-        onClick={() => setMode("original")}
-      >
-        <h3>Original {mode === "original" && "· listening"}</h3>
-        <p className="sub">The untouched upload (silent through the shared lead-in).</p>
-        <Waveform
-          mins={origPeaks.mins}
-          maxs={origPeaks.maxs}
-          color="#8d7f66"
-          playhead={playheadF}
-          onSeek={(f) => seek(f * engine.duration)}
-        />
-      </div>
-
-      <div
-        className="panel"
-        style={{ borderColor: mode === "vinyl" ? "var(--accent)" : undefined, cursor: "pointer" }}
-        onClick={() => setMode("vinyl")}
-      >
-        <h3>Vinyl simulation {mode === "vinyl" && "· listening"}</h3>
-        <p className="sub">
-          The same clip after cutting, the groove medium, and an imperfect turntable.
+    <div className="compare-page">
+      <header className="compare-intro">
+        <span className="compare-kicker">One recording · two paths</span>
+        <h2>Listen to what the groove changes.</h2>
+        <p>
+          Both waveforms share the same clock. Start playback, then move between the clean source
+          and the simulated pressing without losing your place.
         </p>
-        <Waveform
-          mins={vinylPeaks.mins}
-          maxs={vinylPeaks.maxs}
-          playhead={playheadF}
-          onSeek={(f) => seek(f * engine.duration)}
-        />
+        <div className="meta-chips">
+          <span className="chip">{analysis.clip_duration_s.toFixed(1)} seconds</span>
+          <span className="chip">{(analysis.sample_rate / 1000).toFixed(1)} kHz</span>
+          <span className="chip">{analysis.is_stereo ? "Stereo" : "Mono"}</span>
+        </div>
+      </header>
+
+      <div className="waveform-pair">
+        <button
+          className={`waveform-card${mode === "original" ? " active" : ""}`}
+          onClick={() => setMode("original")}
+          aria-pressed={mode === "original"}
+        >
+          <span className="waveform-number">01</span>
+          <span className="waveform-heading">
+            <strong>Digital recording</strong>
+            <small>{mode === "original" ? "Listening now" : "Choose this version"}</small>
+          </span>
+          <span className="waveform-copy">Untouched apart from the shared lead-in.</span>
+          <Waveform
+            mins={origPeaks.mins}
+            maxs={origPeaks.maxs}
+            color="#8d7f66"
+            playhead={playheadF}
+            onSeek={(f) => seek(f * engine.duration)}
+          />
+        </button>
+
+        <button
+          className={`waveform-card vinyl-card${mode === "vinyl" ? " active" : ""}`}
+          onClick={() => setMode("vinyl")}
+          aria-pressed={mode === "vinyl"}
+        >
+          <span className="waveform-number">02</span>
+          <span className="waveform-heading">
+            <strong>Vinyl pressing</strong>
+            <small>{mode === "vinyl" ? "Listening now" : "Choose this version"}</small>
+          </span>
+          <span className="waveform-copy">The same song after the stylus, surface and turntable.</span>
+          <Waveform
+            mins={vinylPeaks.mins}
+            maxs={vinylPeaks.maxs}
+            playhead={playheadF}
+            onSeek={(f) => seek(f * engine.duration)}
+          />
+        </button>
       </div>
 
-      <div className="panel">
-        <h3>How to listen</h3>
-        <ul className="listen-hints">
-          <li>
-            Press <b>Play</b>, then flip <b>Original / Vinyl</b> on the transport bar (or click a
-            panel above) — the switch is sample-synced, so the only thing that changes is the
-            physics.
-          </li>
-          <li>
-            <b>Sustained notes</b> reveal wow &amp; flutter; <b>bright percussion</b> reveals
-            tracing loss; <b>quiet passages</b> reveal the noise floor; <b>loud peaks</b> reveal
-            saturation "warmth".
-          </li>
-          <li>
-            The vinyl side is not an EQ preset: it is the sum of a stylus tracing a spiral
-            groove, an imperfect turntable, and the record's own surface. The <b>3D Groove</b>
-            tab shows the same groove the simulation just read.
-          </li>
-        </ul>
-      </div>
+      <section className="listening-note">
+        <span className="note-mark" aria-hidden>耳</span>
+        <div>
+          <h3>A few things to listen for</h3>
+          <p>
+            Sustained notes reveal wow and flutter. Bright percussion exposes tracing loss. Quiet
+            passages make the surface noise easy to hear, while loud peaks bring out the groove’s
+            saturation. The differences are deliberately stronger than a pristine pressing so they
+            remain audible on ordinary speakers.
+          </p>
+        </div>
+      </section>
     </div>
   );
 }

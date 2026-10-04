@@ -1,10 +1,23 @@
 /**
- * The record label (canvas 2D -> CanvasTexture), carrying the uploaded
- * filename — no external assets. The listening room's textures live in
- * room/textures.ts.
+ * The record label (canvas 2D -> CanvasTexture). Known demo records use their
+ * supplied artwork; uploads and demos without artwork keep the generated
+ * Vinylize label. The canvas remains the texture source in both cases so the
+ * material never has to be replaced when an image finishes loading.
  */
 
 import * as THREE from "three";
+
+const ALBUM_COVERS: Array<{ matches: string[]; src: string }> = [
+  {
+    matches: ["family business", "family-business"],
+    src: "/album-covers/family-business.png",
+  },
+];
+
+function albumCoverFor(filename: string): string | null {
+  const key = filename.toLocaleLowerCase();
+  return ALBUM_COVERS.find((cover) => cover.matches.some((part) => key.includes(part)))?.src ?? null;
+}
 
 export function makeLabelTexture(filename: string): THREE.CanvasTexture {
   const size = 512;
@@ -12,6 +25,10 @@ export function makeLabelTexture(filename: string): THREE.CanvasTexture {
   canvas.width = canvas.height = size;
   const g = canvas.getContext("2d")!;
   const c = size / 2;
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.anisotropy = 8;
+  tex.colorSpace = THREE.SRGBColorSpace;
 
   // Paper base with a subtle radial shade.
   const bg = g.createRadialGradient(c, c, 20, c, c, c);
@@ -53,8 +70,21 @@ export function makeLabelTexture(filename: string): THREE.CanvasTexture {
   g.arc(c, c, 13, 0, Math.PI * 2);
   g.fill();
 
-  const tex = new THREE.CanvasTexture(canvas);
-  tex.anisotropy = 4;
-  tex.colorSpace = THREE.SRGBColorSpace;
+  const cover = albumCoverFor(filename);
+  if (cover) {
+    const image = new Image();
+    image.onload = () => {
+      // Centre-crop instead of stretching in case future artwork is not
+      // square. CircleGeometry performs the final round crop on the record.
+      const sourceSize = Math.min(image.naturalWidth, image.naturalHeight);
+      const sx = (image.naturalWidth - sourceSize) / 2;
+      const sy = (image.naturalHeight - sourceSize) / 2;
+      g.clearRect(0, 0, size, size);
+      g.drawImage(image, sx, sy, sourceSize, sourceSize, 0, 0, size, size);
+      tex.needsUpdate = true;
+    };
+    image.src = cover;
+  }
+
   return tex;
 }

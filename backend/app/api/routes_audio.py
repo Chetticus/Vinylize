@@ -92,12 +92,10 @@ async def load_example(example_id: str) -> schemas.AnalyzeResponse:
     return _analyze_response(session)
 
 
-def _to_wav(samples, sample_rate: int) -> bytes:
-    """16-bit PCM WAV: half the bytes of float32 with headroom to spare —
-    the simulated noise floor sits ~40 dB above 16-bit quantization, and a
-    3-minute stereo clip is ~30 MB instead of ~60 MB to transfer + decode."""
+def _to_wav(samples, sample_rate: int, subtype: str = "PCM_16") -> bytes:
+    """Compact PCM16 for noisy vinyl; FLOAT preserves decoded Digital samples."""
     buf = io.BytesIO()
-    sf.write(buf, samples, sample_rate, format="WAV", subtype="PCM_16")
+    sf.write(buf, samples, sample_rate, format="WAV", subtype=subtype)
     return buf.getvalue()
 
 
@@ -110,6 +108,8 @@ def _process_sync(session: Session, req: schemas.ProcessRequest) -> schemas.Proc
         clicks=req.clicks,
         crosstalk=req.crosstalk,
         noise=req.noise,
+        surface_sound=req.surface_sound,
+        retain_detail=req.retain_detail,
         start_radius_mm=req.start_radius_mm,
         stylus_size=req.stylus_size,
         saturation_drive=req.saturation_drive,
@@ -169,7 +169,9 @@ def _process_sync(session: Session, req: schemas.ProcessRequest) -> schemas.Proc
 
     session.progress_frac, session.progress_label = 0.9, "Encoding audio"
     session.vinyl_wav = _to_wav(result.vinyl, audio.sample_rate)
-    session.original_wav = _to_wav(padded, audio.sample_rate)
+    # Digital is the decoded source, not a new lossy/quantized rendition.
+    # Only the shared lead-in silence is added for sample-aligned switching.
+    session.original_wav = _to_wav(padded, audio.sample_rate, subtype="FLOAT")
     session.geometry_bin = result.geometry.as_binary()
     session.progress_frac, session.progress_label = 1.0, "Done"
 

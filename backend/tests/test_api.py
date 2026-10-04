@@ -66,7 +66,7 @@ def test_lead_in_prepended_and_synced() -> None:
 
     assert orig.shape[0] == vinyl.shape[0]  # sample-locked A/B
     assert orig.shape[0] >= n_lead + int(1.9 * sr)  # clip + lead-in
-    # Original lead-in is dead silence (16-bit: exactly zero)…
+    # Digital lead-in is dead silence…
     assert float(np.abs(orig[: n_lead - 100]).max()) == 0.0
     # …while the vinyl lead-in carries audible surface noise/clicks, but no
     # music-level signal.
@@ -75,6 +75,27 @@ def test_lead_in_prepended_and_synced() -> None:
     # The music region is much louder than the lead-in on the vinyl side.
     music_rms = float(np.sqrt(np.mean(vinyl[n_lead + sr // 2 : n_lead + sr] ** 2)))
     assert music_rms > lead_rms * 3
+
+
+def test_digital_preserves_decoded_source_samples() -> None:
+    from app.audio.ingestion import decode_upload
+    from app.dsp.constants import LEAD_IN_SECONDS
+
+    rate = 22050
+    t = np.arange(rate) / rate
+    source = np.stack([0.217891 * np.sin(2 * np.pi * 330 * t),
+                       0.197123 * np.sin(2 * np.pi * 550 * t)], axis=1).astype(np.float32)
+    upload = io.BytesIO()
+    sf.write(upload, source, rate, format="WAV", subtype="FLOAT")
+    data = upload.getvalue()
+    analyzed = client.post("/api/analyze", files={"file": ("source.wav", data, "audio/wav")}).json()
+    result = client.post("/api/process", json={"session_id": analyzed["session_id"],
+                                              "surface_sound": "codrops", "retain_detail": False}).json()
+    digital, sample_rate = sf.read(io.BytesIO(client.get(result["original_url"]).content),
+                                   dtype="float32", always_2d=True)
+    assert sample_rate == rate
+    n_lead = int(LEAD_IN_SECONDS * rate)
+    np.testing.assert_array_equal(digital[n_lead:], decode_upload(data).samples)
 
 
 def test_rejects_garbage_upload() -> None:

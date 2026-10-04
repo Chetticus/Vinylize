@@ -12,8 +12,8 @@
  * production build.
  */
 
-import { useEffect } from "react";
-import { useThree } from "@react-three/fiber";
+import { useEffect, useRef } from "react";
+import { useFrame, useThree } from "@react-three/fiber";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import * as THREE from "three";
 
@@ -73,6 +73,24 @@ export class EagerResizeObserver {
 
 export default function DevCapture() {
   const get = useThree((s) => s.get);
+  const sample = useRef({ elapsed: 0, frames: 0, slow: 0, calls: 0, triangles: 0 });
+  const profiling = useRef(new URLSearchParams(window.location.search).has("profile"));
+  useFrame((state, delta) => {
+    if (!profiling.current || delta > 0.25) return;
+    const s = sample.current;
+    s.elapsed += delta;
+    s.frames++;
+    if (delta > 0.05) s.slow++;
+    s.calls = Math.max(s.calls, state.gl.info.render.calls);
+    s.triangles = Math.max(s.triangles, state.gl.info.render.triangles);
+    if (s.elapsed < 5) return;
+    console.info("[vinylize performance]", JSON.stringify({
+      fps: Math.round(s.frames / s.elapsed), slowFrames: s.slow,
+      peakDrawCalls: s.calls, peakTriangles: s.triangles,
+      textures: state.gl.info.memory.textures, pixelRatio: state.gl.getPixelRatio(),
+    }));
+    sample.current = { elapsed: 0, frames: 0, slow: 0, calls: 0, triangles: 0 };
+  });
 
   useEffect(() => {
     const step = (n: number) => {

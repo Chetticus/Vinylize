@@ -9,10 +9,25 @@
  *
  *   high   — full room, 2048 shadow map, all props, texture size ×1
  *   medium — full room, 1024 shadow maps, fewer small props, textures ×½
- *   low    — no pendant shadow, sparse dressing, textures ×½, DPR capped at 1
+ *   low    — no pendant shadow, sparse dressing, textures ×½, DPR 1
  */
 
 export type Quality = "high" | "medium" | "low";
+
+/** Supersample desktop edges, even on a 1x display. Never blur the room to
+ * sub-native resolution as a response to slow frames. */
+export function resolutionFor(quality: Quality, deviceRatio: number): number {
+  if (quality === "high") return Math.min(2, Math.max(1.5, deviceRatio));
+  if (quality === "medium") return Math.min(1.5, Math.max(1, deviceRatio));
+  return 1;
+}
+
+export function adjustResolution(quality: Quality, current: number, target: number, meanFrameS: number): number {
+  const floor = quality === "high" ? 1.5 : 1;
+  if (meanFrameS > 1 / 30) return Math.max(floor, current - 0.15);
+  if (meanFrameS < 1 / 55) return Math.min(target, Math.max(floor, current + 0.1));
+  return Math.max(floor, current);
+}
 
 let cached: Quality | null = null;
 
@@ -39,7 +54,9 @@ export function detectQuality(): Quality {
   const mobileGpu = /mali|adreno|powervr|apple gpu/i.test(renderer) && coarse;
 
   if (software || cores <= 2 || memory <= 2) cached = "low";
-  else if (mobileGpu || coarse || cores <= 4 || memory <= 4) cached = "medium";
+  else if (mobileGpu || coarse) cached = "medium";
+  // Restore full-resolution materials and all room dressing on desktop.
+  // Keep cost-saving batching/cached shadows, not a lower-detail room.
   else cached = "high";
   return cached;
 }

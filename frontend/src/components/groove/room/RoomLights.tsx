@@ -32,6 +32,7 @@ import * as kit from "./kit";
 import { BACK_Z, CEIL_Y, CONSOLE, FLOOR_Y, LEFT_X, RIGHT_X, WIN } from "./layout";
 import type { Quality } from "./quality";
 import { useGeoSet } from "./useGeo";
+import { engine, useStore } from "../../../state/store";
 
 const MM2 = 1e6;
 /** Direction the sunlight travels (into the room, downward, slightly to +x). */
@@ -188,14 +189,21 @@ export default function RoomLights({ quality }: { quality: Quality }) {
     rect.current?.lookAt((WIN.x0 + WIN.x1) / 2, (WIN.y0 + WIN.y1) / 2 - 300, 1000);
   }, []);
 
-  // Only the tonearm (slowly) and the spinning platter move, so shadows are
-  // refreshed at ~12 Hz rather than every frame.
+  // Sunlight on the static furniture is baked until a record finishes its
+  // change. Only the small deck shadow needs occasional updates in high mode.
   const acc = useRef(0);
-  useFrame((_, dt) => {
+  const shadowRevision = useRef(-1);
+  useFrame((state, dt) => {
+    const revision = state.scene.userData.shadowRevision ?? 0;
+    if (shadowRevision.current !== revision) {
+      shadowRevision.current = revision;
+      if (sun.current) sun.current.shadow.needsUpdate = true;
+      if (spot.current) spot.current.shadow.needsUpdate = true;
+    }
+    if (quality !== "high" || (!engine.isPlaying && !useStore.getState().cueing)) return;
     acc.current += dt;
-    if (acc.current < 1 / 12) return;
+    if (acc.current < 1 / 4) return;
     acc.current = 0;
-    if (sun.current) sun.current.shadow.needsUpdate = true;
     if (spot.current) spot.current.shadow.needsUpdate = true;
   });
 
@@ -248,7 +256,7 @@ export default function RoomLights({ quality }: { quality: Quality }) {
         decay={2}
         angle={0.62}
         penumbra={0.85}
-        castShadow={quality !== "low"}
+        castShadow={quality === "high"}
         shadow-mapSize={hi ? [1024, 1024] : [512, 512]}
         shadow-camera-near={200}
         shadow-camera-far={3000}
