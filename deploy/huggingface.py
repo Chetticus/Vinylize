@@ -24,6 +24,11 @@ from pathlib import Path
 from huggingface_hub import HfApi
 
 ROOT = Path(__file__).resolve().parents[1]
+DEMO_FILES = (
+    "stand-by-me.mp3",
+    "nothing-can-change-this-love.mp3",
+    "come-a-little-bit-closer.mp3",
+)
 
 SPACE_HEADER = """---
 title: Vinylize
@@ -51,8 +56,14 @@ def stage(dest: Path, with_examples: bool) -> None:
     readme = dest / "README.md"
     readme.write_text(SPACE_HEADER + readme.read_text(encoding="utf-8"), encoding="utf-8")
     examples = ROOT / "backend" / "examples"
-    if with_examples and examples.is_dir():
-        shutil.copytree(examples, dest / "backend" / "examples")
+    if with_examples:
+        target = dest / "backend" / "examples"
+        target.mkdir(parents=True, exist_ok=True)
+        for name in DEMO_FILES:
+            source = examples / name
+            if not source.is_file():
+                raise FileNotFoundError(f"Required demo recording is missing: {source}")
+            shutil.copy2(source, target / name)
 
 
 def main() -> int:
@@ -60,23 +71,29 @@ def main() -> int:
     parser.add_argument("--space", help="Space id, e.g. username/vinylize")
     parser.add_argument("--no-examples", action="store_true", help="ship without example record audio")
     parser.add_argument("--private", action="store_true", help="create the Space as private")
+    parser.add_argument("--update", action="store_true", help="update an existing Vinylize Docker Space")
     args = parser.parse_args()
 
     api = HfApi()
     user = api.whoami()["name"]
     space = args.space or f"{user}/vinylize"
-    api.create_repo(space, repo_type="space", space_sdk="docker", private=args.private, exist_ok=True)
-
     with tempfile.TemporaryDirectory() as tmp:
         folder = Path(tmp) / "space"
         folder.mkdir()
         stage(folder, with_examples=not args.no_examples)
+        # Do not overwrite an existing Space without an explicit update workflow.
+        if args.update:
+            info = api.space_info(space)
+            if info.sdk != "docker":
+                raise ValueError(f"Refusing to replace a non-Docker Space: {space}")
+        else:
+            api.create_repo(space, repo_type="space", space_sdk="docker", space_hardware="cpu-basic",
+                            private=args.private, exist_ok=False)
         api.upload_folder(
             folder_path=folder,
             repo_id=space,
             repo_type="space",
             commit_message="Deploy Vinylize",
-            delete_patterns="*",  # mirror exactly: drop files removed locally
         )
 
     owner, name = space.split("/")

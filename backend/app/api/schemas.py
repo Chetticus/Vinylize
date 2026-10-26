@@ -100,6 +100,9 @@ class ProcessResponse(BaseModel):
     cards: list[ExplorerCardModel]
     vinyl_url: str
     original_url: str
+    original_playback_url: str | None = None
+    vinyl_playback_url: str | None = None
+    original_lead_in_s: float = 0.0
     geometry_url: str
 
 

@@ -25,12 +25,24 @@ from app.audio import examples
 from app.audio.demo import synthesize_demo
 from app.audio.ingestion import AudioIngestError, DecodedAudio, decode_upload
 from app.audio.waveform import peak_decimate
-from app.dsp.constants import GROOVE_HALF_WIDTH_M, GROOVE_PITCH_M, LEAD_IN_SECONDS
+from app.dsp.constants import GROOVE_HALF_WIDTH_M, GROOVE_PITCH_M, LEAD_IN_SECONDS, MAX_CLIP_SECONDS
 from app.dsp.pipeline import PipelineConfig, PipelineResult, run as run_pipeline
 from app.explain.metrics import analyze as analyze_track
 from app.explain.registry import build_cards
 
 router = APIRouter(prefix="/api")
+
+
+def _retain_source(session: Session, data: bytes) -> None:
+    """Reuse short stereo/mono MP3s verbatim; long/multichannel uploads use WAV.
+
+    Browser MP3 decoding avoids transferring an expanded float WAV. The browser
+    adds the same silent lead-in as Vinyl, without applying any audio effects.
+    """
+    info = sf.info(io.BytesIO(data))
+    if (info.format == "MP3" and info.channels <= 2
+            and session.audio.full_duration_s <= MAX_CLIP_SECONDS):
+        session.source_mp3 = data
 
 
 def _analyze_response(session: Session) -> schemas.AnalyzeResponse:
@@ -57,6 +69,7 @@ async def analyze(file: UploadFile = File(...)) -> schemas.AnalyzeResponse:
     except AudioIngestError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     session = store.create(audio, filename=file.filename or "upload")
+    _retain_source(session, data)
     return _analyze_response(session)
 
 
@@ -89,6 +102,8 @@ async def load_example(example_id: str) -> schemas.AnalyzeResponse:
     except AudioIngestError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     session = store.create(audio, filename=examples.display_name(ex))
+    source = await run_in_threadpool((examples.examples_dir() / ex.file).read_bytes)
+    _retain_source(session, source)
     return _analyze_response(session)
 
 
@@ -169,6 +184,13 @@ def _process_sync(session: Session, req: schemas.ProcessRequest) -> schemas.Proc
 
     session.progress_frac, session.progress_label = 0.9, "Encoding audio"
     session.vinyl_wav = _to_wav(result.vinyl, audio.sample_rate)
+    # Compress the existing PCM16 samples losslessly for network playback.
+    # Reading the WAV as int16 guarantees identical samples, not a second
+    # float-to-integer conversion with potentially different rounding.
+    pcm, _ = sf.read(io.BytesIO(session.vinyl_wav), dtype="int16", always_2d=True)
+    compact = io.BytesIO()
+    sf.write(compact, pcm, audio.sample_rate, format="FLAC", subtype="PCM_16")
+    session.vinyl_flac = compact.getvalue()
     # Digital is the decoded source, not a new lossy/quantized rendition.
     # Only the shared lead-in silence is added for sample-aligned switching.
     session.original_wav = _to_wav(padded, audio.sample_rate, subtype="FLOAT")
@@ -190,6 +212,9 @@ def _process_sync(session: Session, req: schemas.ProcessRequest) -> schemas.Proc
         cards=[schemas.ExplorerCardModel(**card.__dict__) for card in cards],
         vinyl_url=f"/api/session/{sid}/vinyl.wav",
         original_url=f"/api/session/{sid}/original.wav",
+        original_playback_url=f"/api/session/{sid}/source.mp3" if session.source_mp3 else None,
+        vinyl_playback_url=f"/api/session/{sid}/vinyl.flac",
+        original_lead_in_s=LEAD_IN_SECONDS if session.source_mp3 else 0.0,
         geometry_url=f"/api/session/{sid}/geometry.bin",
     )
 
@@ -232,6 +257,22 @@ async def original_wav(session_id: str) -> Response:
     if session is None:
         raise HTTPException(status_code=404, detail="Unknown or expired session.")
     return _serve_bytes(session.original_wav, "audio/wav")
+
+
+@router.get("/session/{session_id}/source.mp3")
+async def source_mp3(session_id: str) -> Response:
+    session = store.get(session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Unknown or expired session.")
+    return _serve_bytes(session.source_mp3, "audio/mpeg")
+
+
+@router.get("/session/{session_id}/vinyl.flac")
+async def vinyl_flac(session_id: str) -> Response:
+    session = store.get(session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Unknown or expired session.")
+    return _serve_bytes(session.vinyl_flac, "audio/flac")
 
 
 @router.get("/session/{session_id}/geometry.bin")

@@ -140,9 +140,55 @@ export async function processAudio(
   return res.json();
 }
 
-export async function fetchAudioBuffer(url: string, ctx: AudioContext): Promise<AudioBuffer> {
-  const res = await apiFetch(url);
-  return ctx.decodeAudioData(await res.arrayBuffer());
+export async function fetchAudioBuffer(
+  url: string,
+  ctx: AudioContext,
+  onProgress?: (received: number, total: number) => void,
+  leadInS = 0,
+  clipDurationS?: number,
+): Promise<AudioBuffer> {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 180_000);
+  try {
+    const res = await apiFetch(url, { signal: controller.signal });
+    const total = Number(res.headers.get("content-length")) || 0;
+    const chunks: Uint8Array[] = [];
+    let received = 0;
+    let raw: ArrayBuffer;
+    if (res.body) {
+      const reader = res.body.getReader();
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value);
+        received += value.byteLength;
+        onProgress?.(received, total);
+      }
+      const joined = new Uint8Array(received);
+      let offset = 0;
+      for (const chunk of chunks) { joined.set(chunk, offset); offset += chunk.byteLength; }
+      raw = joined.buffer;
+      chunks.length = 0;
+    } else {
+      raw = await res.arrayBuffer();
+      received = raw.byteLength;
+    }
+    onProgress?.(received, received);
+    const decoded = await ctx.decodeAudioData(raw);
+    if (leadInS <= 0) return decoded;
+    const leadFrames = Math.round(leadInS * decoded.sampleRate);
+    const musicFrames = Math.round((clipDurationS ?? decoded.duration) * decoded.sampleRate);
+    const padded = ctx.createBuffer(decoded.numberOfChannels, leadFrames + musicFrames, decoded.sampleRate);
+    for (let channel = 0; channel < decoded.numberOfChannels; channel++) {
+      padded.getChannelData(channel).set(decoded.getChannelData(channel).subarray(0, musicFrames), leadFrames);
+    }
+    return padded;
+  } catch (err) {
+    if (controller.signal.aborted) throw new Error("The audio download took too long. Please try the record again.");
+    throw err;
+  } finally {
+    window.clearTimeout(timeout);
+  }
 }
 
 /** Fetch + parse a microscope groove window (layout: backend detail_window.py:

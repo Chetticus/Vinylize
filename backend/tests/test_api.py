@@ -103,6 +103,28 @@ def test_rejects_garbage_upload() -> None:
     assert r.status_code == 400
 
 
+def test_compact_playback_preserves_source_and_vinyl_samples() -> None:
+    from pathlib import Path
+
+    from app.dsp.constants import LEAD_IN_SECONDS
+
+    # A real short MP3 already ships with the app: no external song fixture.
+    source = (Path(__file__).parents[1] / "app/audio/assets/codrops-noise1.mp3").read_bytes()
+    analyzed = client.post("/api/analyze", files={"file": ("source.mp3", source, "audio/mpeg")}).json()
+    p = client.post("/api/process", json={"session_id": analyzed["session_id"],
+                                          "surface_sound": "codrops", "retain_detail": False}).json()
+    assert p["original_lead_in_s"] == LEAD_IN_SECONDS
+    assert client.get(p["original_playback_url"]).content == source
+    compressed = client.get(p["vinyl_playback_url"])
+    assert compressed.content[:4] == b"fLaC"
+    wav = client.get(p["vinyl_url"]).content
+    expected, sr = sf.read(io.BytesIO(wav), dtype="int16", always_2d=True)
+    actual, compact_sr = sf.read(io.BytesIO(compressed.content), dtype="int16", always_2d=True)
+    assert sr == compact_sr
+    np.testing.assert_array_equal(actual, expected)
+    assert len(compressed.content) < len(wav)
+
+
 def test_demo_endpoint() -> None:
     r = client.post("/api/demo")
     assert r.status_code == 200

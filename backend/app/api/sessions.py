@@ -29,8 +29,11 @@ class Session:
     session_id: str
     audio: DecodedAudio
     filename: str
+    # Keep compact MP3 sources for browser playback without re-encoding Digital.
+    source_mp3: bytes | None = None
     # Filled by /api/process:
     vinyl_wav: bytes | None = None
+    vinyl_flac: bytes | None = None
     original_wav: bytes | None = None
     geometry_bin: bytes | None = None
     # Live render progress, polled by GET .../progress while /process runs.

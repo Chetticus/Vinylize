@@ -140,12 +140,13 @@ export const useStore = create<SessionState>((set, get) => {
     set({ loading: "Simulating vinyl playback…", progressFrac: 0, error: null });
 
     // Poll the backend's stage-level render progress while /process runs.
+    let processing = true;
     const poll = window.setInterval(() => {
       void fetch(`/api/session/${analysis.session_id}/progress`)
         .then((r) => (r.ok ? r.json() : null))
         .then((p: { frac: number; label: string } | null) => {
-          if (p && get().progressFrac !== null) {
-            set({ progressFrac: p.frac, loading: p.label || "Simulating…" });
+          if (p && processing) {
+            set({ progressFrac: p.frac * 0.8, loading: p.label || "Simulating…" });
           }
         })
         .catch(() => undefined);
@@ -166,15 +167,29 @@ export const useStore = create<SessionState>((set, get) => {
         throw err;
       }
       window.clearInterval(poll);
-      set({ loading: "Decoding audio…", progressFrac: 0.95 });
+      processing = false;
+      set({ loading: "Downloading your record…", progressFrac: 0.8 });
       // One throwaway AudioContext for decoding; playback creates its own on
       // first user gesture (browser autoplay policy).
-      const ctx = new AudioContext();
+      const ctx = new AudioContext({ sampleRate: analysis.sample_rate });
+      const downloads = [{ received: 0, total: 0 }, { received: 0, total: 0 }];
+      const reportDownload = (index: number) => (received: number, total: number) => {
+        downloads[index] = { received, total };
+        const bytes = downloads.reduce((sum, d) => sum + d.received, 0);
+        const expected = downloads.reduce((sum, d) => sum + d.total, 0);
+        const known = downloads.every((d) => d.total > 0);
+        set({
+          loading: known && bytes === expected ? "Preparing playback…" :
+            `Downloading your record… ${(bytes / 1e6).toFixed(1)}${known ? ` / ${(expected / 1e6).toFixed(1)}` : ""} MB`,
+          progressFrac: 0.8 + (known ? Math.min(1, bytes / expected) * 0.19 : 0),
+        });
+      };
       const [originalBuf, vinylBuf, geometry] = await (async () => {
         try {
           return await Promise.all([
-            fetchAudioBuffer(result.original_url, ctx),
-            fetchAudioBuffer(result.vinyl_url, ctx),
+            fetchAudioBuffer(result.original_playback_url ?? result.original_url, ctx,
+              reportDownload(0), result.original_lead_in_s ?? 0, analysis.clip_duration_s),
+            fetchAudioBuffer(result.vinyl_playback_url ?? result.vinyl_url, ctx, reportDownload(1)),
             fetchGeometry(result.geometry_url, result.geometry),
           ]);
         } finally {
@@ -212,6 +227,7 @@ export const useStore = create<SessionState>((set, get) => {
         offline: unreachable ? { message: err.message, missing: err.missing } : null,
       });
     } finally {
+      processing = false;
       window.clearInterval(poll);
     }
   }

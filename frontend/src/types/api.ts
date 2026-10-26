@@ -105,6 +105,9 @@ export interface ProcessResponse {
   cards: ExplorerCard[];
   vinyl_url: string;
   original_url: string;
+  original_playback_url?: string | null;
+  vinyl_playback_url?: string | null;
+  original_lead_in_s?: number;
   geometry_url: string;
 }
 
