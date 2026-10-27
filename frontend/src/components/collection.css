@@ -1,0 +1,34 @@
+.collection { min-width: 0; padding-top: 8px; }
+.collection h2 { margin: 0; font: 25px/1.15 var(--display); font-weight: 400; letter-spacing: -.5px; }
+.collection-invitation { margin: 8px 0 23px; font-size: 13px; color: var(--ink-soft); }
+.record-selection { list-style: none; padding: 0; margin: 0; }
+.record-selection li + li { margin-top: 26px; }
+.record-choice { display: grid; grid-template-columns: 76px minmax(0, 1fr) 12px; align-items: start; gap: 13px; width: 100%; padding: 0; border: 0; background: none; text-align: left; }
+.sleeve { display: block; width: 76px; aspect-ratio: 1; background: #e2e2d8; box-shadow: 0 2px 5px #252a251a; transition: transform .2s; }
+.sleeve img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.sleeve-fallback { display: grid; place-content: center; height: 100%; }
+.record-choice:hover:not(:disabled) .sleeve { transform: translateY(-3px); }
+.record-writing { display: flex; flex-direction: column; min-width: 0; }
+.record-title { font: 19px/1.2 var(--display); letter-spacing: -.2px; }
+.record-choice.selected .record-title { text-decoration: underline; text-decoration-color: #6b7c5d; text-underline-offset: 4px; text-decoration-thickness: 1px; }
+.record-artist { margin-top: 6px; font-size: 11px; line-height: 1.4; color: var(--ink-soft); }
+.record-note { margin-top: 8px; font-size: 12px; line-height: 1.5; color: var(--ink-soft); }
+.record-number { padding-top: 2px; font-size: 10px; color: var(--ink-faint); font-variant-numeric: tabular-nums; }
+.record-choice.selected .record-number { color: var(--spot); }
+.record-choice:disabled:not(.selected) { opacity: .55; }
+.collection-note { margin-top: 35px; max-width: 31ch; font-size: 13px; line-height: 1.7; color: var(--ink-soft); }
+.collection-note p { margin: 0 0 12px; }
+.own-record { margin-top: 30px; }
+.text-link { border: 0; border-bottom: 1px solid #a5ad9c; padding: 0 0 2px; background: none; font-size: 13px; }
+.text-link:hover:not(:disabled) { color: var(--spot); border-color: var(--spot); }
+.text-link:disabled { opacity: .5; }
+.upload-guidance { font-size: 11px; color: var(--ink-soft); margin: 8px 0 0; line-height: 1.6; }
+.test-record { margin-top: 14px; font-size: 12px; color: var(--ink-soft); }
+.test-record summary { cursor: pointer; }
+.test-record .text-link { margin-top: 10px; font-size: 12px; }
+.collection-wait { color: var(--ink-soft); font-size: 13px; }
+.recent-records { margin-top: 26px; }
+.recent-records h3 { font-size: 12px; font-weight: 400; color: var(--ink-faint); margin: 0 0 8px; }
+.recent-records ul { margin: 0; padding: 0; list-style: none; }
+.recent-records button { border: 0; background: none; padding: 4px 0; font-size: 12px; text-align: left; }
+.recent-records button:hover { text-decoration: underline; text-underline-offset: 3px; }
