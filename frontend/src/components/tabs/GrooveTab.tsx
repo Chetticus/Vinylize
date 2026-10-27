@@ -137,7 +137,7 @@ function GrooveTab({ active = true }: { active?: boolean }) {
         )}
         {house && sceneReady && !loading && (
           <div className="room-welcome">
-            Choose a record to begin.
+            <a href="#records">Choose a record to begin.</a>
           </div>
         )}
         {!sceneReady && (

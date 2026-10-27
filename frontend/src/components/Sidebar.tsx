@@ -16,7 +16,7 @@ export default function Sidebar() {
       useExample: s.useExample, loading: s.loading, processResult: s.processResult,
     })));
   return (
-    <aside className="collection" aria-label="Record collection">
+    <aside className="collection" id="records" aria-label="Record collection">
       <h2>A few records</h2>
       <p className="collection-invitation">Pick a sleeve. Put something on.</p>
       <ol className="record-selection">
@@ -27,7 +27,12 @@ export default function Sidebar() {
           return (
             <li key={ex.id}>
               <button className={`record-choice${selected ? " selected" : ""}`}
-                onClick={() => void useExample(ex.id)}
+                onClick={() => {
+                  void useExample(ex.id);
+                  if (window.matchMedia("(max-width: 820px)").matches) {
+                    document.getElementById("main-content")?.scrollIntoView({ behavior: "smooth", block: "start" });
+                  }
+                }}
                 disabled={loading !== null || (selected && processResult !== null)}
                 aria-pressed={selected} aria-label={`${ex.title} by ${ex.artist ?? "unknown artist"}`}>
                 <span className="sleeve">

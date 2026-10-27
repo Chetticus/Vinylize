@@ -3,6 +3,7 @@
 .room-caption { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 5px 18px; margin: 10px 0 0; font-size: 11px; color: var(--ink-soft); }
 .touch-help { display: none; }
 .room-welcome { position: absolute; bottom: 20px; left: 24px; color: #fffaf0; font-size: 13px; text-shadow: 0 1px 6px #000, 0 1px 18px #000; pointer-events: none; }
+.room-welcome a { pointer-events: auto; text-decoration-color: #ffffff80; text-underline-offset: 5px; }
 .groove-loading { position: absolute; inset: 0; z-index: 5; display: flex; align-items: center; justify-content: center; gap: 22px; padding: 24px; background: #171a16; color: #e4e6dc; }
 .loading-disc { width: 66px; height: 66px; flex: none; border-radius: 50%; background: radial-gradient(circle, #171a16 0 3px, #a8b393 3px 13px, #20241e 13px 100%); border: 1px solid #434b3c; }
 .loading-copy { width: min(220px, 60%); }
