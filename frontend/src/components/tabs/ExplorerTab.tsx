@@ -16,16 +16,16 @@
  * having already uploaded something.
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 
 import { useStore } from "../../state/store";
 import {
   ALL_CHAPTERS,
   VINYL_STORY,
-  actOf,
   type StoryBeat,
 } from "../../content/vinylStory";
+import "./story.css";
 
 /** One beat's optional call to action, degraded gracefully with no record. */
 function BeatAction({ beat }: { beat: StoryBeat }) {
@@ -73,6 +73,7 @@ export default function ExplorerTab() {
     explorerFocus: s.explorerFocus, clearExplorerFocus: s.clearExplorerFocus,
   })));
   const [selectedKey, setSelectedKey] = useState(ALL_CHAPTERS[0].key);
+  const contents = useRef<HTMLDetailsElement>(null);
 
   // Sidebar deep links: honour the requested chapter, then clear the request.
   useEffect(() => {
@@ -92,22 +93,19 @@ export default function ExplorerTab() {
 
   const prev = index > 0 ? ALL_CHAPTERS[index - 1] : null;
   const next = index < ALL_CHAPTERS.length - 1 ? ALL_CHAPTERS[index + 1] : null;
-  const progress = ((index + 1) / ALL_CHAPTERS.length) * 100;
 
   const goto = (key: string) => {
     setSelectedKey(key);
+    if (contents.current) contents.current.open = false;
     document.querySelector(".story-read")?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
   return (
     <div className="story-layout">
       {/* ------------------------ journey / contents ------------------------ */}
+      <details className="story-contents" ref={contents}>
+      <summary>Browse the story</summary>
       <nav className="story-rail" aria-label="Story contents">
-        <div className="rail-title">The story of vinyl</div>
-        <p className="story-thesis">
-          Humans found a way to turn invisible sound into a physical object — and that object
-          changed how we experience music.
-        </p>
         {VINYL_STORY.map((act) => (
           <div className="rail-phase" key={act.label}>
             <div className="rail-phase-label">{act.label}</div>
@@ -115,11 +113,9 @@ export default function ExplorerTab() {
               <button
                 key={chapter.key}
                 className={`rail-stage${chapter.key === selected.key ? " active" : ""}`}
+                aria-current={chapter.key === selected.key ? "page" : undefined}
                 onClick={() => goto(chapter.key)}
               >
-                <span className="rail-glyph" aria-hidden>
-                  {chapter.glyph}
-                </span>
                 <span className="rail-text">
                   <span className="rail-name">{chapter.title}</span>
                 </span>
@@ -128,21 +124,14 @@ export default function ExplorerTab() {
           </div>
         ))}
       </nav>
+      </details>
 
       {/* ------------------------------ chapter ------------------------------ */}
       <article className="story-read" key={selected.key}>
-        <div className="story-progress" aria-hidden>
-          <div className="story-progress-fill" style={{ width: `${progress}%` }} />
-        </div>
-
         <header className={`story-header kind-${selected.kind}`}>
-          <div className="story-glyph" aria-hidden>
-            {selected.glyph}
-          </div>
           <div>
             <div className="story-kicker">
               <span className="story-pill">{selected.label}</span>
-              {actOf(selected.key)}
             </div>
             <h2>{selected.title}</h2>
             <p className="story-sub">{selected.subtitle}</p>
