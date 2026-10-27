@@ -1,0 +1,19 @@
+.room-content { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+.groove-wrap { flex: 1; position: relative; min-height: 0; overflow: hidden; background: #120d09; }
+.room-caption { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 5px 18px; margin: 10px 0 0; font-size: 11px; color: var(--ink-soft); }
+.touch-help { display: none; }
+.room-welcome { position: absolute; bottom: 20px; left: 24px; color: #fffaf0; font-size: 13px; text-shadow: 0 1px 6px #000, 0 1px 18px #000; pointer-events: none; }
+.groove-loading { position: absolute; inset: 0; z-index: 5; display: flex; align-items: center; justify-content: center; gap: 22px; padding: 24px; background: #171a16; color: #e4e6dc; }
+.loading-disc { width: 66px; height: 66px; flex: none; border-radius: 50%; background: radial-gradient(circle, #171a16 0 3px, #a8b393 3px 13px, #20241e 13px 100%); border: 1px solid #434b3c; }
+.loading-copy { width: min(220px, 60%); }
+.loading-copy b { font-size: 14px; font-weight: 400; }
+.loading-copy .progress-track { background: #343c2f; }
+.loading-copy .progress-fill { background: #a8b393; }
+@media (pointer: coarse) {
+  .pointer-help { display: none; }
+  .touch-help { display: inline; }
+}
+@media (max-width: 520px) {
+  .room-caption { font-size: 10px; }
+  .acoustics-note { display: none; }
+}

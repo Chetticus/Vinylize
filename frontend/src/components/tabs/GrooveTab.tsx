@@ -8,6 +8,7 @@ import { prepareVinylSurface } from "../groove/GrooveOverviewMaterial";
 import { prepareKit } from "../groove/room/kit";
 import { detectQuality } from "../groove/room/quality";
 import type { AnalyzeResponse, GrooveGeometry, ProcessResponse } from "../../types/api";
+import "./room.css";
 
 interface SceneRecord {
   analysis: AnalyzeResponse;
@@ -119,11 +120,6 @@ function GrooveTab({ active = true }: { active?: boolean }) {
 
   return (
     <div className="tab-content-inner room-content">
-      <div className="groove-toolbar room-toolbar">
-        <span className="room-setting">Listening room</span>
-        <span className="room-setting">Room acoustics</span>
-        <span className="room-help">Move your cursor to look around · scroll to move closer</span>
-      </div>
       <div className="groove-wrap">
         {kitReady && (
           <TurntableScene
@@ -139,19 +135,16 @@ function GrooveTab({ active = true }: { active?: boolean }) {
             onCueEnd={endCue}
           />
         )}
-        {house && sceneReady && (
+        {house && sceneReady && !loading && (
           <div className="room-welcome">
-            <span>The room is ready</span>
-            <b>Choose a record from the shelf</b>
-            <p>The house pressing is only keeping the platter warm.</p>
+            Choose a record to begin.
           </div>
         )}
         {!sceneReady && (
           <div className="groove-loading" role="status" aria-live="polite">
             <div className="loading-disc" aria-hidden />
             <div className="loading-copy">
-              <span className="loading-kicker">Now setting up</span>
-              <b>{kitReady ? "Warming up the room…" : "Dressing the listening room…"}</b>
+              <b>{kitReady ? "Opening the room…" : "Loading the room…"}</b>
               <div className="progress-track" aria-hidden>
                 <div className="progress-fill" style={{ width: `${Math.round(kitReady ? 90 : kitFrac * 85)}%` }} />
               </div>
@@ -159,6 +152,11 @@ function GrooveTab({ active = true }: { active?: boolean }) {
           </div>
         )}
       </div>
+      <p className="room-caption">
+        <span className="pointer-help">Move your mouse to look around. Scroll to get closer.</span>
+        <span className="touch-help">Drag to look around. Pinch to get closer.</span>
+        <span className="acoustics-note">Room acoustics on vinyl</span>
+      </p>
     </div>
   );
 }
