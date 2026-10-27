@@ -1,7 +1,7 @@
-import { useRef } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { useStore } from "../state/store";
 import { RECORD_NOTES } from "../content/records";
+import UploadRecord from "./UploadRecord";
 import "./collection.css";
 
 function formatTime(s: number): string {
@@ -9,13 +9,12 @@ function formatTime(s: number): string {
 }
 
 export default function Sidebar() {
-  const { analysis, library, examples, selectSession, upload, useDemo, useExample, loading, processResult } =
+  const { analysis, library, examples, selectSession, useExample, loading, processResult } =
     useStore(useShallow((s) => ({
       analysis: s.analysis, library: s.library, examples: s.examples,
-      selectSession: s.selectSession, upload: s.upload, useDemo: s.useDemo,
+      selectSession: s.selectSession,
       useExample: s.useExample, loading: s.loading, processResult: s.processResult,
     })));
-  const fileInput = useRef<HTMLInputElement>(null);
   return (
     <aside className="collection" aria-label="Record collection">
       <h2>A few records</h2>
@@ -51,16 +50,7 @@ export default function Sidebar() {
         <p>Just a side project for me and my friends. Three songs, a turntable, and a way to hear digital next to vinyl.</p>
         <p>Try both versions of the same bit of a song. The room and the warmth belong to vinyl.</p>
       </div>
-      <div className="own-record">
-        <button className="text-link" onClick={() => fileInput.current?.click()} disabled={loading !== null}>Play your own file <span aria-hidden>↗</span></button>
-        <p className="upload-guidance">MP3, WAV, FLAC or OGG. Up to three minutes.</p>
-        <input ref={fileInput} type="file" accept=".mp3,.wav,.flac,.ogg,audio/*" hidden
-          onChange={(e) => { const file = e.target.files?.[0]; if (file) void upload(file); e.target.value = ""; }} />
-        <details className="test-record">
-          <summary>No song handy?</summary>
-          <button className="text-link" onClick={() => void useDemo()} disabled={loading !== null}>Try the short test recording</button>
-        </details>
-      </div>
+      <UploadRecord />
       {library.length > 1 && (
         <section className="recent-records" aria-label="Recently played">
           <h3>Played earlier</h3>
