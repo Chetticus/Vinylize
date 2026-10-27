@@ -8,8 +8,8 @@ const GrooveTab = lazy(() => import("./components/tabs/GrooveTab"));
 import { useStore, type TabKey } from "./state/store";
 
 const TABS: Array<[TabKey, string]> = [
-  ["groove", "3D Groove"],
-  ["explorer", "The Vinyl Story"],
+  ["groove", "Listen"],
+  ["explorer", "About vinyl"],
 ];
 
 export default function App() {
@@ -26,21 +26,27 @@ export default function App() {
   }, [checkEngine]);
 
   return (
-    <div className="app">
-      <Sidebar />
-      <div className="main">
-        <nav className="tabbar">
+    <div className="app" data-page={activeTab}>
+      <a className="skip-link" href="#main-content">Skip to the room</a>
+      <header className="site-header">
+        <h1><button className="wordmark" onClick={() => setTab("groove")} aria-label="Vinylize — listening room">vinylize</button></h1>
+        <nav className="site-nav" aria-label="Main navigation">
           {TABS.map(([key, label]) => (
             <button
               key={key}
               className={activeTab === key ? "active" : ""}
+              aria-current={activeTab === key ? "page" : undefined}
               onClick={() => setTab(key)}
             >
               {label}
             </button>
           ))}
         </nav>
+      </header>
 
+      <div className="listening-layout">
+      <Sidebar />
+      <main className="main" id="main-content" tabIndex={-1}>
         <div className={`tab-content${activeTab === "groove" ? " no-scroll" : ""}`}>
           {/* Keep the GPU resources alive across pages, but stop rendering
               while the room is out of view. */}
@@ -57,7 +63,6 @@ export default function App() {
         </div>
 
         <Transport />
-      </div>
 
       {offline && (
         <div className="offline-notice" role="alert">
@@ -74,7 +79,7 @@ export default function App() {
         </div>
       )}
 
-      <div className="statusbar">
+      <div className="statusbar" role="status" aria-live="polite" aria-atomic="true">
         {loading && (
           <div className="status">
             <span className="spinner" />
@@ -91,8 +96,11 @@ export default function App() {
             </div>
           </div>
         )}
-        {error && <div className="status error">⚠ {error}</div>}
+        {error && <div className="status error">{error}</div>}
       </div>
+      </main>
+      </div>
+      <footer className="site-footer">A side project for me and my friends. Headphones welcome.</footer>
     </div>
   );
 }
