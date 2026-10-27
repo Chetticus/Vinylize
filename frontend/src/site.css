@@ -1,11 +1,14 @@
 :root {
   color-scheme: light;
-  --paper: #f4f2ec;
-  --ink: #292d28;
-  --ink-soft: #62665d;
-  --ink-faint: #71766c;
-  --rule: #d9dad0;
-  --spot: #405b42;
+  --paper: #BCBDA8;
+  --ink: #262B24;
+  --ink-soft: #454B40;
+  --ink-faint: #484E40;
+  --rule: #8E947E;
+  --spot: #74412F;
+  --control: #405B42;
+  --control-track: #5E6953;
+  --control-disabled: #8A917E;
   --display: Georgia, "Times New Roman", serif;
   --body: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
@@ -20,7 +23,7 @@ a { color: inherit; text-underline-offset: 4px; }
 button:focus-visible, a:focus-visible, input:focus-visible, summary:focus-visible {
   outline: 2px solid var(--spot); outline-offset: 5px;
 }
-::selection { background: #d7dfc9; }
+::selection { background: #d2d6bb; }
 [hidden] { display: none !important; }
 
 .app { max-width: 1540px; padding: 0 48px; margin: 0 auto; }

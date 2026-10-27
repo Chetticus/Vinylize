@@ -12,7 +12,7 @@
 .story-beat { margin-top: 30px; }
 .story-beat h4 { margin: 0 0 10px; font-size: 13px; font-weight: 600; color: var(--ink-soft); }
 .story-beat p { font: 18px/1.8 var(--display); margin: 0 0 18px; max-width: 68ch; }
-.beat-hear, .beat-explore { margin-top: 34px; padding-left: 20px; border-left: 1px solid #b2bba8; }
+.beat-hear, .beat-explore { margin-top: 34px; padding-left: 20px; border-left: 1px solid var(--rule); }
 .beat-hear p, .beat-explore p { font: 15px/1.75 var(--body); color: var(--ink-soft); }
 .story-question { margin: 38px 0; max-width: 50ch; font: italic 24px/1.55 var(--display); }
 .story-sources { margin-top: 36px; color: var(--ink-soft); font-size: 12px; }
