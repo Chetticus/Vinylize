@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { useStore } from "../state/store";
 
-/** A small file action that makes room for a drop target only while dragging. */
+/** The collection's primary action, with a drop target while dragging. */
 export default function UploadRecord() {
   const { upload, useDemo, loading } = useStore(useShallow((s) => ({
     upload: s.upload, useDemo: s.useDemo, loading: s.loading !== null,
@@ -47,10 +47,10 @@ export default function UploadRecord() {
 
   return (
     <div className="own-record">
-      <button className="text-link" onClick={() => input.current?.click()} disabled={loading} aria-describedby="upload-guidance">
-        Play your own file <span aria-hidden>↗</span>
+      <button className="upload-song-button" onClick={() => input.current?.click()} disabled={loading} aria-describedby="upload-guidance">
+        Vinylize your own song <span aria-hidden>↗</span>
       </button>
-      <p className="upload-guidance" id="upload-guidance">MP3, WAV, FLAC or OGG. Up to three minutes.</p>
+      <p className="upload-guidance" id="upload-guidance">Upload a song and hear it on vinyl. MP3, WAV, FLAC or OGG. Up to three minutes.</p>
       <input ref={input} type="file" accept=".mp3,.wav,.flac,.ogg,audio/*" hidden aria-label="Choose a song"
         onChange={(event) => {
           const file = event.target.files?.[0];

@@ -18,7 +18,10 @@
 .record-choice:disabled:not(.selected) { opacity: .55; }
 .collection-note { margin-top: 35px; max-width: 31ch; font-size: 13px; line-height: 1.7; color: var(--ink-soft); }
 .collection-note p { margin: 0 0 12px; }
-.own-record { margin-top: 30px; }
+.own-record { margin: 0 0 34px; }
+.upload-song-button { display: flex; align-items: center; justify-content: space-between; gap: 16px; width: 100%; min-height: 48px; padding: 13px 16px; border: 1px solid var(--ink); border-radius: 3px; background: var(--ink); color: var(--paper); font-size: 15px; text-align: left; }
+.upload-song-button:hover:not(:disabled) { background: var(--control); border-color: var(--control); }
+.upload-song-button:disabled { opacity: .5; cursor: wait; }
 .text-link { border: 0; border-bottom: 1px solid var(--rule); padding: 0 0 2px; background: none; font-size: 13px; }
 .text-link:hover:not(:disabled) { color: var(--spot); border-color: var(--spot); }
 .text-link:disabled { opacity: .5; }

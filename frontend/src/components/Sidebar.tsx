@@ -17,7 +17,8 @@ export default function Sidebar() {
     })));
   return (
     <aside className="collection" id="records" aria-label="Record collection">
-      <h2>A few records</h2>
+      <UploadRecord />
+      <h2>A few example records</h2>
       <p className="collection-invitation">Pick a sleeve. Put something on.</p>
       <ol className="record-selection">
         {examples.map((ex, index) => {
@@ -50,13 +51,12 @@ export default function Sidebar() {
           );
         })}
       </ol>
-      {examples.length === 0 && <p className="collection-wait">Getting the records… You can also play your own file below.</p>}
+      {examples.length === 0 && <p className="collection-wait">Getting the records… You can also upload your own song above.</p>}
       <div className="collection-note">
         <p>I built Vinylize to explore why a recording can feel familiar even when a cleaner version of it exists. It simulates the physical details of vinyl playback: a stylus following a groove, small changes in speed, surface noise, and distortion.</p>
         <p>My grandma and cousin helped me tune it by listening. Their feedback often sent me back to changes I thought were finished. What began as a coding project became something we could work on together.</p>
         <p>Choose a record or bring your own, then switch between Digital and Vinyl to hear what changes.</p>
       </div>
-      <UploadRecord />
       {library.length > 1 && (
         <section className="recent-records" aria-label="Recently played">
           <h3>Played earlier</h3>
