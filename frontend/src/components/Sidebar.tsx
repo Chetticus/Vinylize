@@ -52,8 +52,9 @@ export default function Sidebar() {
       </ol>
       {examples.length === 0 && <p className="collection-wait">Getting the records… You can also play your own file below.</p>}
       <div className="collection-note">
-        <p>Just a side project for me and my friends. Three songs, a turntable, and a way to hear digital next to vinyl.</p>
-        <p>Try both versions of the same bit of a song. The room and the warmth belong to vinyl.</p>
+        <p>I built Vinylize to explore why a recording can feel familiar even when a cleaner version of it exists. It simulates the physical details of vinyl playback: a stylus following a groove, small changes in speed, surface noise, and distortion.</p>
+        <p>My grandma and cousin helped me tune it by listening. Their feedback often sent me back to changes I thought were finished. What began as a coding project became something we could work on together.</p>
+        <p>Choose a record or bring your own, then switch between Digital and Vinyl to hear what changes.</p>
       </div>
       <UploadRecord />
       {library.length > 1 && (
